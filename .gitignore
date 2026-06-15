@@ -5,3 +5,11 @@ dist/
 *.db-wal
 .env
 .env.local
+.vscode/
+.idea/
+.cursor/
+*.tsbuildinfo
+coverage/
+test-results/
+playwright-report/
+.env.*.local
