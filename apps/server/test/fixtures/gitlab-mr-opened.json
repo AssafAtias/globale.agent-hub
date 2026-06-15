@@ -1,0 +1,15 @@
+{
+  "object_kind": "merge_request",
+  "project": { "path_with_namespace": "global-e/checkout-apps" },
+  "object_attributes": {
+    "iid": 42,
+    "title": "CORE-123456: Add shipping validation",
+    "description": "Adds shipping address validation component.",
+    "state": "opened",
+    "action": "open",
+    "source_branch": "feature/CORE-123456",
+    "target_branch": "main",
+    "url": "https://gitlab.example.com/global-e/checkout-apps/-/merge_requests/42"
+  },
+  "changes": {}
+}

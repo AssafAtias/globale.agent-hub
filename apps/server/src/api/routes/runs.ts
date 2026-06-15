@@ -77,6 +77,20 @@ export const runsRoutes: FastifyPluginAsyncTypebox = async (app) => {
       RunRepository.fail(req.params.id, req.body.error);
     } else {
       RunRepository.complete(req.params.id, req.body.result ?? '');
+      // Fan out result to configured outputs (fire-and-forget)
+      const completedRun = RunRepository.findById(req.params.id);
+      const agent = completedRun ? AgentRepository.findById(completedRun.agentId) : null;
+      if (completedRun && agent && req.body.result) {
+        const { ResultDispatcher } = await import('../../services/ResultDispatcher.js');
+        const dispatcher = new ResultDispatcher(
+          process.env.GITLAB_API_TOKEN,
+          process.env.JIRA_API_TOKEN,
+          process.env.JIRA_BASE_URL,
+        );
+        dispatcher.dispatch(completedRun, agent).catch(e =>
+          app.log.error(e, 'ResultDispatcher error')
+        );
+      }
     }
     return reply.status(200).send({ ok: true });
   });

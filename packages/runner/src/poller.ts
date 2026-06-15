@@ -36,7 +36,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
       console.log(`[runner] Claimed run ${job.run.id} for agent "${job.agent.name}"`);
 
       try {
-        const result = await executeJob(job, client);
+        const result = await executeJob(job, client, config.localReposRoot);
         await postResult(config, job.run.id, { result });
         console.log(`[runner] Run ${job.run.id} completed`);
       } catch (err) {

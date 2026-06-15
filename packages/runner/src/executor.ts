@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { LocalEnricher } from './context/LocalEnricher.js';
 
 export interface Job {
   run: {
@@ -10,6 +11,7 @@ export interface Job {
     name: string;
     model: string;
     prompt: string;
+    repos: string;
   };
 }
 
@@ -24,8 +26,11 @@ export function isJob(v: unknown): v is Job {
   );
 }
 
-export async function executeJob(job: Job, client: Anthropic): Promise<string> {
-  const contextText = formatContext(safeParseContext(job.run.context));
+export async function executeJob(job: Job, client: Anthropic, localReposRoot: string): Promise<string> {
+  const enricher = new LocalEnricher(localReposRoot);
+  const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
+  const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
+  const contextText = formatContext(safeParseContext(enrichedContextStr));
 
   const message = await client.messages.create({
     model: job.agent.model,
