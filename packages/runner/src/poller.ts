@@ -1,18 +1,22 @@
+import Anthropic from '@anthropic-ai/sdk';
 import type { RunnerConfig } from './config.js';
-import { executeJob, type Job } from './executor.js';
+import { executeJob, isJob } from './executor.js';
 
 export async function startPollLoop(config: RunnerConfig): Promise<never> {
   console.log(`[runner] Starting poll loop → ${config.orchestratorUrl}`);
+  const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
   while (true) {
     try {
       const res = await fetch(`${config.orchestratorUrl}/api/runs/next`, {
-        headers: { 'x-runner-token': config.runnerToken },
-        signal: AbortSignal.timeout(35_000), // slightly > server 30s hold
+        headers: {
+          'x-runner-token': config.runnerToken,
+          'x-runner-name': config.runnerName,
+        },
+        signal: AbortSignal.timeout(35_000),
       });
 
       if (res.status === 204) {
-        // no jobs, loop immediately
         continue;
       }
 
@@ -22,11 +26,17 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
         continue;
       }
 
-      const job = (await res.json()) as Job;
+      const raw = await res.json();
+      if (!isJob(raw)) {
+        console.error('[runner] Unexpected job shape from server:', JSON.stringify(raw).slice(0, 200));
+        await sleep(5000);
+        continue;
+      }
+      const job = raw;
       console.log(`[runner] Claimed run ${job.run.id} for agent "${job.agent.name}"`);
 
       try {
-        const result = await executeJob(job, config.anthropicApiKey);
+        const result = await executeJob(job, client);
         await postResult(config, job.run.id, { result });
         console.log(`[runner] Run ${job.run.id} completed`);
       } catch (err) {
@@ -46,14 +56,18 @@ async function postResult(
   runId: string,
   body: { result?: string; error?: string },
 ) {
-  await fetch(`${config.orchestratorUrl}/api/runs/${runId}/result`, {
+  const res = await fetch(`${config.orchestratorUrl}/api/runs/${runId}/result`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'x-runner-token': config.runnerToken,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
   });
+  if (!res.ok) {
+    throw new Error(`postResult failed: ${res.status} ${await res.text()}`);
+  }
 }
 
 function sleep(ms: number) {
