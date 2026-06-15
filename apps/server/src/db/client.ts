@@ -15,5 +15,8 @@ export function getDb(url: string = './agent-hub.db') {
 }
 
 export function resetDb() {
-  _db = null; // for tests
+  if (_db) {
+    (_db as any).$client?.close();
+  }
+  _db = null;
 }
