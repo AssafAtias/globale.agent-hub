@@ -8,8 +8,9 @@ import { RunStatusBadge } from '../components/RunStatusBadge.js';
 
 export function RunDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: run, isLoading } = useRun(id!);
+  const { data: run, isLoading } = useRun(id ?? '');
 
+  if (!id) return <Typography>Invalid run ID.</Typography>;
   if (isLoading) return <CircularProgress />;
   if (!run) return <Typography>Run not found.</Typography>;
 

@@ -18,6 +18,7 @@ export function useDeleteAgent() {
   return useMutation({
     mutationFn: (id: string) => api.agents.delete(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+    onError: (err) => console.error('Failed to delete agent:', err),
   });
 }
 

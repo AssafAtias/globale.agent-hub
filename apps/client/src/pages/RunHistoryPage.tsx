@@ -4,17 +4,19 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
 import { useRuns } from '../hooks/useRuns.js';
 import { RunStatusBadge } from '../components/RunStatusBadge.js';
 
 export function RunHistoryPage() {
-  const { data: runs } = useRuns();
+  const { data: runs, isLoading } = useRuns();
   const navigate = useNavigate();
 
   return (
     <>
       <Typography variant="h5" gutterBottom>Run History</Typography>
+      {isLoading && <CircularProgress sx={{ mt: 2 }} />}
       <Table size="small">
         <TableHead>
           <TableRow>

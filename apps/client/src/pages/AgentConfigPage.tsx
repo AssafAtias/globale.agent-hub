@@ -30,23 +30,34 @@ export function AgentConfigPage() {
   const [triggerRules, setTriggerRules] = useState(DEFAULT_RULES);
   const [outputs, setOutputs] = useState<string[]>(['dashboard']);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isNew && id) {
+      const controller = new AbortController();
       api.agents.get(id).then(a => {
+        if (controller.signal.aborted) return;
         setName(a.name);
         setType(a.type as 'pr-review' | 'ticket-to-code');
         setModel(a.model);
         setPrompt(a.prompt);
-        setRepos((JSON.parse(a.repos || '[]') as string[]).join('\n'));
-        setTriggerRules(JSON.parse(a.triggerRules || '{}'));
-        setOutputs(JSON.parse(a.outputs || '["dashboard"]'));
+        const repoList = (() => { try { return JSON.parse(a.repos || '[]') as string[]; } catch { return [] as string[]; } })();
+        setRepos(repoList.join('\n'));
+        const rules = (() => { try { return JSON.parse(a.triggerRules || '{}'); } catch { return { events: [] }; } })();
+        setTriggerRules(rules);
+        const outs = (() => { try { return JSON.parse(a.outputs || '["dashboard"]') as string[]; } catch { return ['dashboard']; } })();
+        setOutputs(outs);
+      }).catch(err => {
+        if (!controller.signal.aborted) setLoadError(String(err));
       });
+      return () => controller.abort();
     }
   }, [id, isNew]);
 
   async function save() {
     setSaving(true);
+    setSaveError(null);
     const body: Partial<import('../api/client.js').Agent> = {
       name, type, model, prompt,
       repos: JSON.stringify(repos.split('\n').map(r => r.trim()).filter(Boolean)),
@@ -58,6 +69,8 @@ export function AgentConfigPage() {
       else await api.agents.update(id!, body);
       qc.invalidateQueries({ queryKey: ['agents'] });
       navigate('/');
+    } catch (err) {
+      setSaveError(String(err));
     } finally {
       setSaving(false);
     }
@@ -66,6 +79,7 @@ export function AgentConfigPage() {
   return (
     <Box maxWidth={640}>
       <Typography variant="h5" gutterBottom>{isNew ? 'New Agent' : 'Edit Agent'}</Typography>
+      {loadError && <Typography color="error" sx={{ mb: 2 }}>{loadError}</Typography>}
       <Box display="flex" flexDirection="column" gap={3}>
         <TextField label="Name" value={name} onChange={e => setName(e.target.value)} fullWidth />
         <FormControl fullWidth>
@@ -92,6 +106,7 @@ export function AgentConfigPage() {
         <PromptEditor value={prompt} onChange={setPrompt} />
         <TriggerRulesForm value={triggerRules} onChange={v => setTriggerRules(v as typeof triggerRules)} />
         <OutputSelector value={outputs} onChange={setOutputs} />
+        {saveError && <Typography color="error">{saveError}</Typography>}
         <Box display="flex" gap={2}>
           <Button variant="outlined" onClick={() => navigate('/')}>Cancel</Button>
           <Button variant="contained" onClick={save} disabled={saving || !name}>

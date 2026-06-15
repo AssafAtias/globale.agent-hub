@@ -12,7 +12,10 @@ interface Props { agent: Agent; onEdit: (id: string) => void; }
 
 export function AgentCard({ agent, onEdit }: Props) {
   const trigger = useTriggerRun();
-  const repos = JSON.parse(agent.repos || '[]') as string[];
+  const repos = (() => {
+    try { return JSON.parse(agent.repos || '[]') as string[]; }
+    catch { return [] as string[]; }
+  })();
 
   return (
     <Card sx={{ mb: 2 }}>

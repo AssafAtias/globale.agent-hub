@@ -6,10 +6,11 @@ import { useAgents } from '../hooks/useAgents.js';
 import { AgentCard } from '../components/AgentCard.js';
 
 export function AgentsPage() {
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents, isLoading, isError } = useAgents();
   const navigate = useNavigate();
 
   if (isLoading) return <CircularProgress />;
+  if (isError) return <Typography color="error">Failed to load agents. Is the server running?</Typography>;
 
   return (
     <>
