@@ -1,19 +1,28 @@
 import { Type, Static } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
 const EnvSchema = Type.Object({
-  PORT: Type.Optional(Type.String({ default: '3000' })),
-  DATABASE_URL: Type.String(),
-  GITLAB_WEBHOOK_SECRET: Type.String(),
+  PORT: Type.Optional(Type.String()),
+  DATABASE_URL: Type.Optional(Type.String()),
+  GITLAB_WEBHOOK_SECRET: Type.Optional(Type.String()),
   JIRA_WEBHOOK_SECRET: Type.Optional(Type.String()),
   GITLAB_API_TOKEN: Type.Optional(Type.String()),
   JIRA_API_TOKEN: Type.Optional(Type.String()),
-  JIRA_BASE_URL: Type.Optional(Type.String({ default: 'https://global-e.atlassian.net' })),
+  JIRA_BASE_URL: Type.Optional(Type.String()),
 });
 
-export type Environment = Static<typeof EnvSchema>;
+export type Environment = {
+  PORT: string;
+  DATABASE_URL: string;
+  GITLAB_WEBHOOK_SECRET: string;
+  JIRA_WEBHOOK_SECRET: string | undefined;
+  GITLAB_API_TOKEN: string | undefined;
+  JIRA_API_TOKEN: string | undefined;
+  JIRA_BASE_URL: string;
+};
 
 export function loadConfig(): Environment {
-  return {
+  const config: Environment = {
     PORT: process.env.PORT ?? '3000',
     DATABASE_URL: process.env.DATABASE_URL ?? './agent-hub.db',
     GITLAB_WEBHOOK_SECRET: process.env.GITLAB_WEBHOOK_SECRET ?? 'changeme',
@@ -22,4 +31,11 @@ export function loadConfig(): Environment {
     JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
     JIRA_BASE_URL: process.env.JIRA_BASE_URL ?? 'https://global-e.atlassian.net',
   };
+
+  // Warn loudly when insecure defaults are in use
+  if (config.GITLAB_WEBHOOK_SECRET === 'changeme') {
+    console.warn('[config] WARNING: GITLAB_WEBHOOK_SECRET is using the insecure default "changeme". Set it in your .env file.');
+  }
+
+  return config;
 }
