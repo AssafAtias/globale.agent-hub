@@ -1,4 +1,4 @@
-import { parseGitLabEvent, matchAgents } from '../src/services/WebhookMatcher.js';
+import { parseGitLabEvent, parseJiraEvent, matchAgents } from '../src/services/WebhookMatcher.js';
 import gitlabPayload from './fixtures/gitlab-mr-opened.json';
 import { AgentRepository } from '../src/services/AgentRepository.js';
 import { getDb, resetDb } from '../src/db/client.js';
@@ -33,6 +33,38 @@ describe('parseGitLabEvent', () => {
 
   it('returns null for unknown event kind', () => {
     expect(parseGitLabEvent({ object_kind: 'unknown', project: { path_with_namespace: 'a/b' } })).toBeNull();
+  });
+});
+
+describe('parseJiraEvent', () => {
+  it('returns jira:status:in-progress when status is In Progress', () => {
+    const body = {
+      webhookEvent: 'jira:issue_updated',
+      issue: {
+        key: 'CORE-123',
+        fields: {
+          project: { key: 'CORE' },
+          status: { name: 'In Progress' },
+        },
+      },
+    };
+    const event = parseJiraEvent(body);
+    expect(event?.eventType).toBe('jira:status:in-progress');
+    expect(event?.repo).toBe('jira:CORE');
+  });
+
+  it('returns null for non-In-Progress status', () => {
+    const body = {
+      webhookEvent: 'jira:issue_updated',
+      issue: {
+        key: 'CORE-123',
+        fields: {
+          project: { key: 'CORE' },
+          status: { name: 'Done' },
+        },
+      },
+    };
+    expect(parseJiraEvent(body)).toBeNull();
   });
 });
 

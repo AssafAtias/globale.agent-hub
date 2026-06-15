@@ -60,6 +60,9 @@ export class ContextFetcher {
       parts['Status'] = ctx.ticket.status;
       parts['Description'] = ctx.ticket.description;
     }
+    if (Object.keys(parts).length === 0) {
+      parts['Raw Payload'] = JSON.stringify(ctx.rawPayload, null, 2).slice(0, 4000);
+    }
     return JSON.stringify(parts);
   }
 }

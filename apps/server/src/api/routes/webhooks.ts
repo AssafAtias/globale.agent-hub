@@ -15,7 +15,7 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
 
     app.post('/webhooks/gitlab', {
       schema: {
-        headers: Type.Object({ 'x-gitlab-token': Type.Optional(Type.String()) }),
+        headers: Type.Object({ 'x-gitlab-token': Type.String() }, { additionalProperties: true }),
         body: Type.Any(),
       },
     }, async (req, reply) => {
