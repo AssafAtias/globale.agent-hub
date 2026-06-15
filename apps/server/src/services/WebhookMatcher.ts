@@ -61,8 +61,11 @@ export function matchAgents(event: ParsedWebhookEvent): AgentRow[] {
     const events = (rules.events ?? []) as string[];
     if (!events.includes(event.eventType)) return false;
     if (rules.branchFilter && event.sourceRef) {
-      const pattern = (rules.branchFilter as string).replace('*', '.*');
-      if (!new RegExp(`^${pattern}$`).test(event.sourceRef)) return false;
+      // Escape special regex chars in user-supplied filter, then convert * to .*
+      const escaped = (rules.branchFilter as string)
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')  // escape special chars
+        .replace(/\*/g, '.*');                    // convert * wildcard to .*
+      if (!new RegExp(`^${escaped}$`).test(event.sourceRef)) return false;
     }
     return true;
   });

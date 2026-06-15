@@ -7,6 +7,10 @@ import type { Environment } from '../../config/environment.js';
 
 export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncTypebox {
   return async (app) => {
+    if (!config.JIRA_WEBHOOK_SECRET) {
+      app.log.warn('[webhooks] JIRA_WEBHOOK_SECRET is not set — /webhooks/jira is unauthenticated');
+    }
+
     const fetcher = new ContextFetcher(
       config.GITLAB_API_TOKEN,
       config.JIRA_API_TOKEN,

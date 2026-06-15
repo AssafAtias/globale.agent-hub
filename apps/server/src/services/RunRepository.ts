@@ -27,19 +27,28 @@ export const RunRepository = {
     getDb().insert(runs).values(row).run();
     return row;
   },
-  // Atomically claim the next pending run for a runner
+  // Atomically claim the next pending run for a runner.
+  // Uses better-sqlite3's synchronous transaction with BEGIN IMMEDIATE so only
+  // one writer can enter at a time — no TOCTOU race between concurrent runners.
   claimNext(runnerId: string): RunRow | null {
-    const run = getDb()
-      .select().from(runs)
-      .where(eq(runs.status, 'pending'))
-      .get();
-    if (!run) return null;
-    getDb().update(runs).set({
-      status: 'running',
-      runnerId,
-      startedAt: new Date().toISOString(),
-    }).where(and(eq(runs.id, run.id), eq(runs.status, 'pending'))).run();
-    return RunRepository.findById(run.id);
+    const startedAt = new Date().toISOString();
+    const db = getDb();
+    const sqlite = (db as any).$client as import('better-sqlite3').Database;
+
+    const claim = sqlite.transaction(() => {
+      const pending = db.select().from(runs).where(eq(runs.status, 'pending')).get();
+      if (!pending) return null;
+
+      db.update(runs).set({
+        status: 'running',
+        runnerId,
+        startedAt,
+      }).where(and(eq(runs.id, pending.id), eq(runs.status, 'pending'))).run();
+
+      return db.select().from(runs).where(eq(runs.id, pending.id)).get() ?? null;
+    });
+
+    return claim() as RunRow | null;
   },
   complete(id: string, result: string) {
     getDb().update(runs).set({

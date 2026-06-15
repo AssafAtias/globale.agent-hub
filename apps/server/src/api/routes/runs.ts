@@ -17,6 +17,7 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
     app.get('/api/runs/next', {
       schema: {
         headers: Type.Object({ 'x-runner-token': Type.String() }),
+        response: { 200: Type.Any(), 204: Type.Any(), 401: Type.Any() },
       },
     }, async (req, reply) => {
       const runner = RunnerRepository.findByToken(req.headers['x-runner-token']);
@@ -37,7 +38,10 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
     });
 
     app.get('/api/runs/:id', {
-      schema: { params: Type.Object({ id: Type.String() }) },
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Any(), 404: Type.Any() },
+      },
     }, async (req, reply) => {
       const run = RunRepository.findById(req.params.id);
       if (!run) return reply.status(404).send({ error: 'Not found' });
@@ -71,6 +75,7 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
           result: Type.Optional(Type.String()),
           error: Type.Optional(Type.String()),
         }),
+        response: { 200: Type.Object({ ok: Type.Boolean() }), 401: Type.Any() },
       },
     }, async (req, reply) => {
       const runner = RunnerRepository.findByToken(req.headers['x-runner-token']);
