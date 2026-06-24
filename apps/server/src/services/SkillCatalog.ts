@@ -8,7 +8,8 @@ export interface SkillSummary {
 
 /** Parse the leading YAML-ish frontmatter block for `name` and `description`. */
 export function parseFrontmatter(md: string): { name?: string; description?: string } {
-  const m = md.match(/^---\s*\n([\s\S]*?)\n---/);
+  const text = md.replace(/\r\n/g, '\n');
+  const m = text.match(/^---\s*\n([\s\S]*?)\n---/);
   if (!m) return {};
   const block = m[1];
   const name = block.match(/^name:\s*(.+?)\s*$/m)?.[1];

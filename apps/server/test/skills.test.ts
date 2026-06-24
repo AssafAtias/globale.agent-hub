@@ -26,6 +26,10 @@ describe('parseFrontmatter', () => {
   it('returns empty object when no frontmatter', () => {
     expect(parseFrontmatter('# just a heading')).toEqual({});
   });
+  it('handles CRLF line endings', () => {
+    const fm = parseFrontmatter('---\r\nname: foo\r\ndescription: bar baz\r\n---\r\nbody');
+    expect(fm).toEqual({ name: 'foo', description: 'bar baz' });
+  });
 });
 
 describe('SkillCatalog', () => {
