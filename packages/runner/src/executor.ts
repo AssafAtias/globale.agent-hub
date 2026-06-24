@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import { LocalEnricher } from './context/LocalEnricher.js';
+import { SkillLoader } from './context/SkillLoader.js';
 
 export interface Job {
   run: {
@@ -15,6 +16,7 @@ export interface Job {
     model: string;
     prompt: string;
     repos: string;
+    skills?: string;
   };
 }
 
@@ -29,13 +31,49 @@ export function isJob(v: unknown): v is Job {
   );
 }
 
-export async function executeJob(job: Job, apiKey: string, localReposRoot: string): Promise<string> {
+export interface MemoryInput {
+  focus: string | null;
+  entries: { note: string }[];
+}
+
+const MEMORY_INSTRUCTION =
+  'To record something for your future self, end your reply with a single ' +
+  '<memory-update>...</memory-update> block containing a concise note (what you did / what you learned). ' +
+  'Write nothing there if there is nothing worth remembering.';
+
+export function extractMemoryUpdate(text: string): { result: string; note: string | null } {
+  const m = text.match(/<memory-update>([\s\S]*?)<\/memory-update>/);
+  if (!m) return { result: text, note: null };
+  const note = m[1].trim();
+  const result = (text.slice(0, m.index) + text.slice(m.index! + m[0].length)).trim();
+  return { result, note: note.length > 0 ? note : null };
+}
+
+export async function executeJob(
+  job: Job, apiKey: string, localReposRoot: string, skillsDir: string, memory: MemoryInput,
+): Promise<{ result: string; note: string | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
   const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
   const contextText = formatContext(safeParseContext(enrichedContextStr));
 
-  return runClaude(apiKey, job.agent.model, job.agent.prompt, contextText);
+  const skillNames = (() => { try { return JSON.parse(job.agent.skills || '[]') as string[]; } catch { return [] as string[]; } })();
+  const skillsText = new SkillLoader(skillsDir).load(skillNames);
+
+  const parts: string[] = [];
+  if (skillsText) parts.push(`## Skills\n\n${skillsText}`);
+  if (memory.focus && memory.focus.trim()) parts.push(`## Focus\n\n${memory.focus.trim()}`);
+  if (memory.entries.length > 0) {
+    const bullets = memory.entries.map((e) => `- ${e.note}`).join('\n');
+    parts.push(`## Memory (recent)\n\n${bullets}\n\n${MEMORY_INSTRUCTION}`);
+  } else {
+    parts.push(MEMORY_INSTRUCTION);
+  }
+  parts.push(job.agent.prompt);
+  const systemPrompt = parts.join('\n\n---\n\n');
+
+  const raw = await runClaude(apiKey, job.agent.model, systemPrompt, contextText);
+  return extractMemoryUpdate(raw);
 }
 
 // Build an Anthropic client. Two auth modes:

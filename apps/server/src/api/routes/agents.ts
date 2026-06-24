@@ -1,6 +1,7 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { AgentRepository } from '../../services/AgentRepository.js';
+import { AgentMemoryRepository } from '../../services/AgentMemoryRepository.js';
 
 const AgentBody = Type.Object({
   name: Type.String(),
@@ -19,6 +20,7 @@ const AgentBody = Type.Object({
   title: Type.Optional(Type.String({ maxLength: 80 })),
   bio: Type.Optional(Type.String({ maxLength: 500 })),
   skills: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  focus: Type.Optional(Type.String({ maxLength: 4000 })),
 });
 
 export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
@@ -37,6 +39,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
         title: req.body.title ?? null,
         bio: req.body.bio ?? null,
         skills: JSON.stringify(req.body.skills ?? []),
+        focus: req.body.focus ?? null,
       });
       return reply.status(201).send(agent);
     }
@@ -70,6 +73,43 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     schema: { params: Type.Object({ id: Type.String() }) },
   }, async (req, reply) => {
     AgentRepository.delete(req.params.id);
+    return reply.status(204).send();
+  });
+
+  const MEMORY_INJECT_LIMIT = 20;
+
+  app.get('/api/agents/:id/memory', {
+    schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Any(), 404: Type.Any() } },
+  }, async (req, reply) => {
+    const agent = AgentRepository.findById(req.params.id);
+    if (!agent) return reply.status(404).send({ error: 'Not found' });
+    const entries = AgentMemoryRepository.listForAgent(req.params.id, MEMORY_INJECT_LIMIT)
+      .map((e) => ({ id: e.id, runId: e.runId, note: e.note, createdAt: e.createdAt }));
+    return { focus: agent.focus ?? null, entries };
+  });
+
+  app.post('/api/agents/:id/memory', {
+    schema: {
+      params: Type.Object({ id: Type.String() }),
+      body: Type.Object({ runId: Type.Optional(Type.String()), note: Type.String() }),
+      response: { 201: Type.Any(), 400: Type.Any(), 404: Type.Any() },
+    },
+  }, async (req, reply) => {
+    const agent = AgentRepository.findById(req.params.id);
+    if (!agent) return reply.status(404).send({ error: 'Not found' });
+    if (!req.body.note.trim()) return reply.status(400).send({ error: 'note is required' });
+    const entry = AgentMemoryRepository.append({
+      agentId: req.params.id, runId: req.body.runId ?? null, note: req.body.note.trim(),
+    });
+    return reply.status(201).send(entry);
+  });
+
+  app.delete('/api/agents/:id/memory', {
+    schema: { params: Type.Object({ id: Type.String() }), response: { 204: Type.Any(), 404: Type.Any() } },
+  }, async (req, reply) => {
+    const agent = AgentRepository.findById(req.params.id);
+    if (!agent) return reply.status(404).send({ error: 'Not found' });
+    AgentMemoryRepository.clearForAgent(req.params.id);
     return reply.status(204).send();
   });
 };

@@ -1,6 +1,36 @@
 import type { RunnerConfig } from './config.js';
 import { executeJob, isJob } from './executor.js';
 
+async function fetchMemory(config: RunnerConfig, agentId: string): Promise<{ focus: string | null; entries: { note: string }[] }> {
+  try {
+    const res = await fetch(`${config.orchestratorUrl}/api/agents/${agentId}/memory`, {
+      headers: { 'x-runner-token': config.runnerToken },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      console.error(`[runner] memory GET for agent ${agentId} returned ${res.status}`);
+      return { focus: null, entries: [] };
+    }
+    return await res.json();
+  } catch (err) {
+    console.error(`[runner] failed to fetch memory for agent ${agentId}:`, err);
+    return { focus: null, entries: [] };
+  }
+}
+
+async function postMemory(config: RunnerConfig, agentId: string, body: { runId: string; note: string }) {
+  try {
+    await fetch(`${config.orchestratorUrl}/api/agents/${agentId}/memory`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-runner-token': config.runnerToken },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    console.error(`[runner] failed to save memory for agent ${agentId}:`, err);
+  }
+}
+
 export async function startPollLoop(config: RunnerConfig): Promise<never> {
   console.log(`[runner] Starting poll loop → ${config.orchestratorUrl}`);
 
@@ -34,8 +64,10 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
       console.log(`[runner] Claimed run ${job.run.id} for agent "${job.agent.name}"`);
 
       try {
-        const result = await executeJob(job, config.anthropicApiKey, config.localReposRoot);
+        const memory = await fetchMemory(config, job.run.agentId);
+        const { result, note } = await executeJob(job, config.anthropicApiKey, config.localReposRoot, config.skillsDir, memory);
         await postResult(config, job.run.id, { result });
+        if (note) await postMemory(config, job.run.agentId, { runId: job.run.id, note });
         console.log(`[runner] Run ${job.run.id} completed`);
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);

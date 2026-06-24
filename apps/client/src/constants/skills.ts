@@ -1,8 +1,3 @@
-export const SKILL_CATALOG: string[] = [
-  'Code Review', 'Jira', 'GitLab', 'Testing', 'Refactoring',
-  'Documentation', 'Security', 'Performance', 'Bug Hunting', 'TypeScript',
-];
-
 export function normalizeSkill(s: string): string {
   return s.trim().replace(/\s+/g, ' ');
 }

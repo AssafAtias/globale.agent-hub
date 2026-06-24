@@ -12,7 +12,8 @@ function setupInMemoryDb() {
       trigger_rules TEXT NOT NULL, outputs TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
       avatar_key TEXT, title TEXT, bio TEXT,
-      skills TEXT NOT NULL DEFAULT '[]'
+      skills TEXT NOT NULL DEFAULT '[]',
+      focus TEXT
     )
   `);
   return db;

@@ -25,7 +25,8 @@ it('inserts and retrieves an agent from in-memory DB', () => {
       avatar_key TEXT,
       title TEXT,
       bio TEXT,
-      skills TEXT NOT NULL DEFAULT '[]'
+      skills TEXT NOT NULL DEFAULT '[]',
+      focus TEXT
     )
   `);
 

@@ -19,7 +19,8 @@ function setupInMemoryDb() {
       avatar_key TEXT,
       title TEXT,
       bio TEXT,
-      skills TEXT NOT NULL DEFAULT '[]'
+      skills TEXT NOT NULL DEFAULT '[]',
+      focus TEXT
     )
   `);
   return db;
