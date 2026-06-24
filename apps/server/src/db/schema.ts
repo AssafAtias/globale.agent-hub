@@ -15,6 +15,7 @@ export const agents = sqliteTable('agents', {
   title: text('title'),
   bio: text('bio'),
   skills: text('skills').notNull().default('[]'), // JSON: string[]
+  focus: text('focus'),
 });
 
 export const runs = sqliteTable('runs', {
@@ -45,4 +46,12 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull(),
   role: text('role').notNull().default('member'),
+});
+
+export const agentMemory = sqliteTable('agent_memory', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull().references(() => agents.id),
+  runId: text('run_id'),
+  note: text('note').notNull(),
+  createdAt: text('created_at').notNull(),
 });

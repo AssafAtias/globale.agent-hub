@@ -4,12 +4,13 @@ import { getDb } from '../db/client.js';
 import { agents } from '../db/schema.js';
 
 export type AgentRow = typeof agents.$inferSelect;
-export type AgentInsert = Omit<AgentRow, 'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills'> & {
+export type AgentInsert = Omit<AgentRow, 'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus'> & {
   enabled?: boolean;
   avatarKey?: string | null;
   title?: string | null;
   bio?: string | null;
   skills?: string; // skills is a JSON string: string[]
+  focus?: string | null;
 };
 
 export const AgentRepository = {
@@ -29,6 +30,7 @@ export const AgentRepository = {
       title: data.title ?? null,
       bio: data.bio ?? null,
       skills: data.skills ?? '[]',
+      focus: data.focus ?? null,
     };
     getDb().insert(agents).values(row).run();
     return row;
