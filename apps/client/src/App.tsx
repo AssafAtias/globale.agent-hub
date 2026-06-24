@@ -8,6 +8,7 @@ import { AgentConfigPage } from './pages/AgentConfigPage.js';
 import { RunHistoryPage } from './pages/RunHistoryPage.js';
 import { RunDetailPage } from './pages/RunDetailPage.js';
 import { RunnersPage } from './pages/RunnersPage.js';
+import { AgentProfilePage } from './pages/AgentProfilePage.js';
 
 const qc = new QueryClient();
 
@@ -20,7 +21,9 @@ export function App() {
           <Layout>
             <Routes>
               <Route path="/" element={<AgentsPage />} />
-              <Route path="/agents/:id" element={<AgentConfigPage />} />
+              <Route path="/agents/new" element={<AgentConfigPage />} />
+              <Route path="/agents/:id/edit" element={<AgentConfigPage />} />
+              <Route path="/agents/:id" element={<AgentProfilePage />} />
               <Route path="/runs" element={<RunHistoryPage />} />
               <Route path="/runs/:id" element={<RunDetailPage />} />
               <Route path="/runners" element={<RunnersPage />} />
