@@ -13,6 +13,9 @@ import { PromptEditor } from '../components/PromptEditor.js';
 import { TriggerRulesForm } from '../components/TriggerRulesForm.js';
 import { OutputSelector } from '../components/OutputSelector.js';
 import { useQueryClient } from '@tanstack/react-query';
+import { AvatarPicker } from '../components/AvatarPicker.js';
+import { SkillsSelector } from '../components/SkillsSelector.js';
+import { dedupeSkills } from '../constants/skills.js';
 
 const DEFAULT_RULES = { events: [] as string[], branchFilter: undefined as string | undefined, jiraLabel: undefined as string | undefined };
 
@@ -29,6 +32,10 @@ export function AgentConfigPage() {
   const [repos, setRepos] = useState('');
   const [triggerRules, setTriggerRules] = useState(DEFAULT_RULES);
   const [outputs, setOutputs] = useState<string[]>(['dashboard']);
+  const [avatarKey, setAvatarKey] = useState<string | undefined>(undefined);
+  const [title, setTitle] = useState('');
+  const [bio, setBio] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -48,6 +55,11 @@ export function AgentConfigPage() {
         setTriggerRules(rules);
         const outs = (() => { try { return JSON.parse(a.outputs || '["dashboard"]') as string[]; } catch { return ['dashboard']; } })();
         setOutputs(outs);
+        setAvatarKey(a.avatarKey ?? undefined);
+        setTitle(a.title ?? '');
+        setBio(a.bio ?? '');
+        const skillList = (() => { try { return JSON.parse(a.skills || '[]') as string[]; } catch { return [] as string[]; } })();
+        setSkills(skillList);
       }).catch(err => {
         if (!controller.signal.aborted) setLoadError(String(err));
       });
@@ -63,6 +75,10 @@ export function AgentConfigPage() {
       repos: repos.split('\n').map(r => r.trim()).filter(Boolean),
       triggerRules,
       outputs,
+      avatarKey,
+      title: title.trim() || undefined,
+      bio: bio.trim() || undefined,
+      skills: dedupeSkills(skills),
     };
     try {
       if (isNew) await api.agents.create(body);
@@ -82,6 +98,10 @@ export function AgentConfigPage() {
       {loadError && <Typography color="error" sx={{ mb: 2 }}>{loadError}</Typography>}
       <Box display="flex" flexDirection="column" gap={3}>
         <TextField label="Name" value={name} onChange={e => setName(e.target.value)} fullWidth />
+        <AvatarPicker value={avatarKey} onChange={setAvatarKey} name={name || 'Agent'} />
+        <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} fullWidth placeholder="e.g. Senior Bug Hunter" />
+        <TextField label="Bio" value={bio} onChange={e => setBio(e.target.value)} fullWidth multiline minRows={2} placeholder="A short description of this agent's character" />
+        <SkillsSelector value={skills} onChange={setSkills} />
         <FormControl fullWidth>
           <InputLabel>Type</InputLabel>
           <Select value={type} label="Type" onChange={e => setType(e.target.value as 'pr-review' | 'ticket-to-code')}>
