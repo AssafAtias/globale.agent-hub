@@ -35,6 +35,7 @@ export function AgentConfigPage() {
   const [avatarKey, setAvatarKey] = useState<string | undefined>(undefined);
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
+  const [focus, setFocus] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export function AgentConfigPage() {
         setAvatarKey(a.avatarKey ?? undefined);
         setTitle(a.title ?? '');
         setBio(a.bio ?? '');
+        setFocus(a.focus ?? '');
         const skillList = (() => { try { return JSON.parse(a.skills || '[]') as string[]; } catch { return [] as string[]; } })();
         setSkills(skillList);
       }).catch(err => {
@@ -78,6 +80,7 @@ export function AgentConfigPage() {
       avatarKey,
       title: title.trim() || undefined,
       bio: bio.trim() || undefined,
+      focus: focus.trim() || undefined,
       skills: dedupeSkills(skills),
     };
     try {
@@ -101,6 +104,12 @@ export function AgentConfigPage() {
         <AvatarPicker value={avatarKey} onChange={setAvatarKey} name={name || 'Agent'} />
         <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} fullWidth placeholder="e.g. Senior Bug Hunter" />
         <TextField label="Bio" value={bio} onChange={e => setBio(e.target.value)} fullWidth multiline minRows={2} placeholder="A short description of this agent's character" />
+        <TextField
+          label="Focus" value={focus} onChange={e => setFocus(e.target.value)}
+          fullWidth multiline minRows={2}
+          placeholder="What this agent is currently working on"
+          helperText="Injected into every run as the agent's current focus."
+        />
         <SkillsSelector value={skills} onChange={setSkills} />
         <FormControl fullWidth>
           <InputLabel>Type</InputLabel>

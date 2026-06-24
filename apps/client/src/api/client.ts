@@ -15,14 +15,17 @@ export interface Agent {
   repos: string; triggerRules: string; outputs: string;
   enabled: boolean; createdAt: string;
   avatarKey?: string | null; title?: string | null; bio?: string | null;
+  focus?: string | null;
   skills: string; // JSON: string[]
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
   repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string };
   outputs: string[]; enabled?: boolean;
-  avatarKey?: string; title?: string; bio?: string; skills?: string[];
+  avatarKey?: string; title?: string; bio?: string; focus?: string; skills?: string[];
 }
+export interface MemoryEntry { id: string; runId: string | null; note: string; createdAt: string; }
+export interface AgentMemory { focus: string | null; entries: MemoryEntry[]; }
 export interface Run {
   id: string; agentId: string; trigger: string; status: string;
   result: string | null; error: string | null; createdAt: string; finishedAt: string | null;
@@ -40,6 +43,12 @@ export const api = {
     create: (body: Partial<AgentInput>) => req<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Partial<AgentInput>) => req<Agent>(`/api/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: string) => req<void>(`/api/agents/${id}`, { method: 'DELETE' }),
+    memory: {
+      get: (id: string) => req<AgentMemory>(`/api/agents/${id}/memory`),
+      append: (id: string, body: { runId?: string; note: string }) =>
+        req<MemoryEntry>(`/api/agents/${id}/memory`, { method: 'POST', body: JSON.stringify(body) }),
+      clear: (id: string) => req<void>(`/api/agents/${id}/memory`, { method: 'DELETE' }),
+    },
   },
   runs: {
     list: () => req<Run[]>('/api/runs'),

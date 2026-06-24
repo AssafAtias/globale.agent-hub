@@ -9,6 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import { api, type Agent } from '../api/client.js';
 import { useRuns } from '../hooks/useRuns.js';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AgentAvatar } from '../components/AgentAvatar.js';
 import { RunStatusBadge } from '../components/RunStatusBadge.js';
 
@@ -20,6 +21,16 @@ export function AgentProfilePage() {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { data: runs } = useRuns();
+  const qc = useQueryClient();
+  const { data: memory } = useQuery({
+    queryKey: ['agent-memory', id],
+    queryFn: () => api.agents.memory.get(id!),
+    enabled: !!id,
+  });
+  const clearMemory = useMutation({
+    mutationFn: () => api.agents.memory.clear(id!),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-memory', id] }),
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -84,6 +95,34 @@ export function AgentProfilePage() {
           ))}
         </Stack>
       ) : <Typography color="text.secondary" variant="body2">No runs yet.</Typography>}
+
+      <Divider sx={{ my: 3 }} />
+      <Box display="flex" alignItems="center" gap={2} mb={1}>
+        <Typography variant="subtitle2" flex={1}>Memory</Typography>
+        {(memory?.entries.length ?? 0) > 0 && (
+          <Button size="small" color="warning"
+            onClick={() => { if (confirm('Clear all memory for this agent?')) clearMemory.mutate(); }}>
+            Clear memory
+          </Button>
+        )}
+      </Box>
+      {memory?.focus && (
+        <Typography variant="body2" sx={{ mb: 2, fontStyle: 'italic' }}>
+          Focus: {memory.focus}
+        </Typography>
+      )}
+      {memory && memory.entries.length > 0 ? (
+        <Stack spacing={1}>
+          {memory.entries.map((e) => (
+            <Box key={e.id}>
+              <Typography variant="body2">{e.note}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(e.createdAt).toLocaleString()}
+              </Typography>
+            </Box>
+          ))}
+        </Stack>
+      ) : <Typography color="text.secondary" variant="body2">No memory yet.</Typography>}
 
       <Box mt={3}>
         <Button variant="outlined" onClick={() => navigate(`/agents/${agent.id}/edit`)}>
