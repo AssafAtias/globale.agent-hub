@@ -22,7 +22,7 @@
 
 ---
 
-### Task C1: Server — focus column, agent_memory table, repository, and memory endpoints
+### Task 1: Server — focus column, agent_memory table, repository, and memory endpoints
 
 **Files:**
 - Modify: `apps/server/src/db/schema.ts` (focus column + `agentMemory` table)
@@ -293,7 +293,7 @@ git commit -m "feat(server): agent focus column + memory bank endpoints"
 
 ---
 
-### Task C2: Client — Focus field and memory viewer
+### Task 2: Client — Focus field and memory viewer
 
 **Files:**
 - Modify: `apps/client/src/api/client.ts` (Agent.focus, AgentInput.focus, memory api)
@@ -301,7 +301,7 @@ git commit -m "feat(server): agent focus column + memory bank endpoints"
 - Modify: `apps/client/src/pages/AgentProfilePage.tsx` (Memory section)
 
 **Interfaces:**
-- Consumes: memory endpoints (Task C1).
+- Consumes: memory endpoints (Task 1).
 - Produces: `api.agents.memory.get(id)`, `.append(id, { runId?, note })`, `.clear(id)`; `Agent.focus?: string | null`; `AgentInput.focus?: string`.
 
 - [ ] **Step 1: Add types and memory API methods**
@@ -421,7 +421,7 @@ git commit -m "feat(client): agent Focus field and memory viewer"
 
 ---
 
-### Task C3: Runner — inject focus + memory and persist memory updates
+### Task 3: Runner — inject focus + memory and persist memory updates
 
 **Files:**
 - Modify: `packages/runner/src/executor.ts` (extract function, inject, return shape)
@@ -429,7 +429,7 @@ git commit -m "feat(client): agent Focus field and memory viewer"
 - Create: `packages/runner/test/memoryUpdate.test.ts`
 
 **Interfaces:**
-- Consumes: `GET/POST /api/agents/:id/memory` (Task C1); `executeJob(job, apiKey, localReposRoot, skillsDir)` from Plan B.
+- Consumes: `GET/POST /api/agents/:id/memory` (Task 1); `executeJob(job, apiKey, localReposRoot, skillsDir)` from Plan B.
 - Produces: `extractMemoryUpdate(text: string): { result: string; note: string | null }` — returns the text with the first `<memory-update>…</memory-update>` block removed and the trimmed block contents as `note` (or `null` if none).
 - Produces: new `executeJob` signature `executeJob(job, apiKey, localReposRoot, skillsDir, memory): Promise<{ result: string; note: string | null }>` where `memory: { focus: string | null; entries: { note: string }[] }`.
 

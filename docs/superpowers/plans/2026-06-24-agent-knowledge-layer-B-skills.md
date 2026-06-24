@@ -20,7 +20,7 @@
 
 ---
 
-### Task B1: Server — skill catalog service and `GET /api/skills`
+### Task 1: Server — skill catalog service and `GET /api/skills`
 
 **Files:**
 - Modify: `apps/server/src/config/environment.ts` (add `SKILLS_DIR`)
@@ -203,7 +203,7 @@ git commit -m "feat(server): skill catalog service and GET /api/skills"
 
 ---
 
-### Task B2: Client — searchable skill picker from the catalog
+### Task 2: Client — searchable skill picker from the catalog
 
 **Files:**
 - Modify: `apps/client/src/api/client.ts` (add `api.skills.list`)
@@ -212,7 +212,7 @@ git commit -m "feat(server): skill catalog service and GET /api/skills"
 - Modify: `apps/client/src/constants/skills.ts` (remove hardcoded `SKILL_CATALOG`)
 
 **Interfaces:**
-- Consumes: `GET /api/skills` (Task B1) → `{ name: string; description: string }[]`.
+- Consumes: `GET /api/skills` (Task 1) → `{ name: string; description: string }[]`.
 - Produces: `api.skills.list(): Promise<SkillSummary[]>` where `SkillSummary = { name: string; description: string }`.
 - Produces: `useSkills()` react-query hook (`queryKey: ['skills']`).
 - `SkillsSelector` props unchanged: `{ value: string[]; onChange: (skills: string[]) => void }`.
@@ -343,7 +343,7 @@ git commit -m "feat(client): searchable skill picker backed by GET /api/skills"
 
 ---
 
-### Task B3: Runner — load skill bodies and inject into the prompt
+### Task 3: Runner — load skill bodies and inject into the prompt
 
 **Files:**
 - Modify: `packages/runner/src/config.ts` (add `skillsDir`)
