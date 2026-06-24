@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import { LocalEnricher } from './context/LocalEnricher.js';
+import { SkillLoader } from './context/SkillLoader.js';
 
 export interface Job {
   run: {
@@ -15,6 +16,7 @@ export interface Job {
     model: string;
     prompt: string;
     repos: string;
+    skills?: string;
   };
 }
 
@@ -29,13 +31,19 @@ export function isJob(v: unknown): v is Job {
   );
 }
 
-export async function executeJob(job: Job, apiKey: string, localReposRoot: string): Promise<string> {
+export async function executeJob(job: Job, apiKey: string, localReposRoot: string, skillsDir: string): Promise<string> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
   const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
   const contextText = formatContext(safeParseContext(enrichedContextStr));
 
-  return runClaude(apiKey, job.agent.model, job.agent.prompt, contextText);
+  const skillNames = (() => { try { return JSON.parse(job.agent.skills || '[]') as string[]; } catch { return [] as string[]; } })();
+  const skillsText = new SkillLoader(skillsDir).load(skillNames);
+  const systemPrompt = skillsText
+    ? `## Skills\n\n${skillsText}\n\n---\n\n${job.agent.prompt}`
+    : job.agent.prompt;
+
+  return runClaude(apiKey, job.agent.model, systemPrompt, contextText);
 }
 
 // Build an Anthropic client. Two auth modes:

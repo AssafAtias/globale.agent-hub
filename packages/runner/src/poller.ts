@@ -34,7 +34,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
       console.log(`[runner] Claimed run ${job.run.id} for agent "${job.agent.name}"`);
 
       try {
-        const result = await executeJob(job, config.anthropicApiKey, config.localReposRoot);
+        const result = await executeJob(job, config.anthropicApiKey, config.localReposRoot, config.skillsDir);
         await postResult(config, job.run.id, { result });
         console.log(`[runner] Run ${job.run.id} completed`);
       } catch (err) {

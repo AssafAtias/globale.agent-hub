@@ -4,6 +4,7 @@ export interface RunnerConfig {
   runnerName: string;
   anthropicApiKey: string;
   localReposRoot: string;
+  skillsDir: string;
 }
 
 export function loadConfig(): RunnerConfig {
@@ -18,5 +19,6 @@ export function loadConfig(): RunnerConfig {
     runnerName: process.env.RUNNER_NAME ?? 'local-runner',
     anthropicApiKey: required('ANTHROPIC_API_KEY'),
     localReposRoot: process.env.LOCAL_REPOS_ROOT ?? 'C:/GlobalE',
+    skillsDir: process.env.SKILLS_DIR ?? 'C:/GlobalE/.claude/skills',
   };
 }
