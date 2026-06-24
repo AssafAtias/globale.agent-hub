@@ -9,7 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const DRAWER_WIDTH = 220;
 const NAV = [
   { label: 'Agents', path: '/' },
-  { label: 'Run History', path: '/runs' },
+  { label: 'Activity', path: '/runs' },
   { label: 'Runners', path: '/runners' },
 ];
 
