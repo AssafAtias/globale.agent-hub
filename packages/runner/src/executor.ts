@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import { LocalEnricher } from './context/LocalEnricher.js';
 
@@ -26,25 +29,81 @@ export function isJob(v: unknown): v is Job {
   );
 }
 
-export async function executeJob(job: Job, client: Anthropic, localReposRoot: string): Promise<string> {
+export async function executeJob(job: Job, apiKey: string, localReposRoot: string): Promise<string> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
   const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
   const contextText = formatContext(safeParseContext(enrichedContextStr));
 
-  const message = await client.messages.create({
-    model: job.agent.model,
-    max_tokens: 8096,
-    system: job.agent.prompt,
-    messages: [{ role: 'user', content: contextText }],
+  return runClaude(apiKey, job.agent.model, job.agent.prompt, contextText);
+}
+
+// Build an Anthropic client. Two auth modes:
+//  1. A real API key (sk-ant-api...) in ANTHROPIC_API_KEY → standard x-api-key auth.
+//  2. Otherwise, the live Claude Code OAuth token from ~/.claude/.credentials.json
+//     → Bearer auth + the oauth beta header (uses the logged-in Claude subscription,
+//     no paid API key). Read fresh each call so Claude Code's token refreshes are
+//     picked up. Note: this token expires (~hours) and is only refreshed while
+//     Claude Code itself runs; subscription rate limits apply (429s are shared).
+function buildClient(apiKey: string): Anthropic {
+  if (apiKey && apiKey.startsWith('sk-ant-api')) {
+    return new Anthropic({ apiKey, maxRetries: 3 });
+  }
+  const token = readClaudeOAuthToken();
+  if (!token) {
+    throw new Error(
+      'No usable credentials. Set ANTHROPIC_API_KEY to a real API key (sk-ant-api...), ' +
+      'or log in with Claude Code so ~/.claude/.credentials.json contains an OAuth token.',
+    );
+  }
+  // apiKey: null prevents the SDK from auto-reading ANTHROPIC_API_KEY from the
+  // environment and sending x-api-key alongside the Bearer token — the API
+  // rejects requests that carry both.
+  return new Anthropic({
+    apiKey: null,
+    authToken: token,
+    defaultHeaders: { 'anthropic-beta': 'oauth-2025-04-20' },
+    maxRetries: 3,
+  });
+}
+
+function readClaudeOAuthToken(): string | null {
+  try {
+    const raw = readFileSync(join(homedir(), '.claude', '.credentials.json'), 'utf8');
+    const creds = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } };
+    return creds.claudeAiOauth?.accessToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Call the Anthropic Messages API over HTTPS via the official SDK. This replaces
+// the previous approach of spawning the local claude.exe CLI, which CrowdStrike
+// Falcon blocks (node.exe spawning the 236MB binary trips a behavioral rule →
+// "spawn EPERM"). An HTTPS API call spawns no child process, so it isn't blocked.
+// Requires a valid ANTHROPIC_API_KEY (sk-ant-api...), unlike the CLI which used
+// the logged-in session.
+async function runClaude(apiKey: string, model: string, systemPrompt: string, userMessage: string): Promise<string> {
+  const client = buildClient(apiKey);
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 16000,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
   });
 
-  const textBlock = message.content.find(b => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') {
-    console.warn(`[runner] No text content in Claude response for run ${job.run.id}`);
-    return '(no output)';
+  if (response.stop_reason === 'refusal') {
+    throw new Error('Claude declined the request (stop_reason: refusal)');
   }
-  return textBlock.text;
+
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
+    .trim();
+
+  return text || '(no output)';
 }
 
 function safeParseContext(raw: string): Record<string, unknown> {

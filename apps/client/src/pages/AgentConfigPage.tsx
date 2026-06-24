@@ -8,7 +8,7 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Typography from '@mui/material/Typography';
-import { api } from '../api/client.js';
+import { api, type AgentInput } from '../api/client.js';
 import { PromptEditor } from '../components/PromptEditor.js';
 import { TriggerRulesForm } from '../components/TriggerRulesForm.js';
 import { OutputSelector } from '../components/OutputSelector.js';
@@ -58,11 +58,11 @@ export function AgentConfigPage() {
   async function save() {
     setSaving(true);
     setSaveError(null);
-    const body: Partial<import('../api/client.js').Agent> = {
+    const body: Partial<AgentInput> = {
       name, type, model, prompt,
-      repos: JSON.stringify(repos.split('\n').map(r => r.trim()).filter(Boolean)),
-      triggerRules: JSON.stringify(triggerRules),
-      outputs: JSON.stringify(outputs),
+      repos: repos.split('\n').map(r => r.trim()).filter(Boolean),
+      triggerRules,
+      outputs,
     };
     try {
       if (isNew) await api.agents.create(body);

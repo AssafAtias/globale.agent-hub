@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Agent } from '../api/client.js';
+import { api, type AgentInput } from '../api/client.js';
 
 export function useAgents() {
   return useQuery({ queryKey: ['agents'], queryFn: api.agents.list });
@@ -8,7 +8,7 @@ export function useAgents() {
 export function useCreateAgent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<Agent>) => api.agents.create(body),
+    mutationFn: (body: Partial<AgentInput>) => api.agents.create(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   });
 }

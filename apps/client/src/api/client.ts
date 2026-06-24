@@ -15,6 +15,11 @@ export interface Agent {
   repos: string; triggerRules: string; outputs: string;
   enabled: boolean; createdAt: string;
 }
+export interface AgentInput {
+  name: string; type: string; model: string; prompt: string;
+  repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string };
+  outputs: string[]; enabled?: boolean;
+}
 export interface Run {
   id: string; agentId: string; trigger: string; status: string;
   result: string | null; error: string | null; createdAt: string; finishedAt: string | null;
@@ -27,8 +32,8 @@ export const api = {
   agents: {
     list: () => req<Agent[]>('/api/agents'),
     get: (id: string) => req<Agent>(`/api/agents/${id}`),
-    create: (body: Partial<Agent>) => req<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(body) }),
-    update: (id: string, body: Partial<Agent>) => req<Agent>(`/api/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    create: (body: Partial<AgentInput>) => req<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Partial<AgentInput>) => req<Agent>(`/api/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: string) => req<void>(`/api/agents/${id}`, { method: 'DELETE' }),
   },
   runs: {

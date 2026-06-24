@@ -45,7 +45,14 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.put('/api/agents/:id', {
     schema: { params: Type.Object({ id: Type.String() }), body: Type.Partial(AgentBody) },
   }, async (req, reply) => {
-    const updated = AgentRepository.update(req.params.id, req.body as any);
+    // repos/triggerRules/outputs are stored as JSON text columns, so serialize
+    // any structured fields the client sent before persisting (mirrors POST).
+    const body = req.body as Record<string, unknown>;
+    const patch: Record<string, unknown> = { ...body };
+    if (body.repos !== undefined) patch.repos = JSON.stringify(body.repos);
+    if (body.triggerRules !== undefined) patch.triggerRules = JSON.stringify(body.triggerRules);
+    if (body.outputs !== undefined) patch.outputs = JSON.stringify(body.outputs);
+    const updated = AgentRepository.update(req.params.id, patch as any);
     if (!updated) return reply.status(404).send({ error: 'Not found' });
     return updated;
   });

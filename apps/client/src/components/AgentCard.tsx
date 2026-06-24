@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { useNavigate } from 'react-router-dom';
 import { type Agent } from '../api/client.js';
 import { useTriggerRun } from '../hooks/useAgents.js';
 
@@ -12,6 +13,7 @@ interface Props { agent: Agent; onEdit: (id: string) => void; }
 
 export function AgentCard({ agent, onEdit }: Props) {
   const trigger = useTriggerRun();
+  const navigate = useNavigate();
   const repos = (() => {
     try { return JSON.parse(agent.repos || '[]') as string[]; }
     catch { return [] as string[]; }
@@ -36,7 +38,7 @@ export function AgentCard({ agent, onEdit }: Props) {
         <Button size="small" onClick={() => onEdit(agent.id)}>Edit</Button>
         <Button
           size="small" variant="contained" startIcon={<PlayArrowIcon />}
-          onClick={() => trigger.mutate(agent.id)}
+          onClick={() => trigger.mutate(agent.id, { onSuccess: (run) => navigate(`/runs/${run.id}`) })}
           disabled={trigger.isPending}
         >
           Run

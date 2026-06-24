@@ -1,10 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import type { RunnerConfig } from './config.js';
 import { executeJob, isJob } from './executor.js';
 
 export async function startPollLoop(config: RunnerConfig): Promise<never> {
   console.log(`[runner] Starting poll loop → ${config.orchestratorUrl}`);
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
   while (true) {
     try {
@@ -36,7 +34,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
       console.log(`[runner] Claimed run ${job.run.id} for agent "${job.agent.name}"`);
 
       try {
-        const result = await executeJob(job, client, config.localReposRoot);
+        const result = await executeJob(job, config.anthropicApiKey, config.localReposRoot);
         await postResult(config, job.run.id, { result });
         console.log(`[runner] Run ${job.run.id} completed`);
       } catch (err) {
