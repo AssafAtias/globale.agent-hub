@@ -19,6 +19,7 @@ function setupInMemoryDb() {
       status TEXT NOT NULL DEFAULT 'pending', runner_id TEXT,
       result TEXT, error TEXT, created_at TEXT NOT NULL,
       started_at TEXT, finished_at TEXT,
+      archived INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (agent_id) REFERENCES agents(id)
     );
     CREATE TABLE IF NOT EXISTS runners (
@@ -154,5 +155,40 @@ describe('Runs API', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().runnerId).toBeDefined();
     expect(res.json().token).toBeDefined();
+  });
+
+  it('PATCH /api/runs/:id archives and unarchives a run', async () => {
+    const agent = await createAgent();
+    const { id: runId } = (await app.inject({
+      method: 'POST', url: '/api/runs', payload: { agentId: agent.id },
+    })).json();
+
+    // Newly created run is not archived
+    let run = (await app.inject({ method: 'GET', url: `/api/runs/${runId}` })).json();
+    expect(run.archived).toBe(false);
+
+    // Archive it
+    const archiveRes = await app.inject({
+      method: 'PATCH', url: `/api/runs/${runId}`, payload: { archived: true },
+    });
+    expect(archiveRes.statusCode).toBe(200);
+    expect(archiveRes.json().archived).toBe(true);
+
+    run = (await app.inject({ method: 'GET', url: `/api/runs/${runId}` })).json();
+    expect(run.archived).toBe(true);
+
+    // Unarchive it
+    const unarchiveRes = await app.inject({
+      method: 'PATCH', url: `/api/runs/${runId}`, payload: { archived: false },
+    });
+    expect(unarchiveRes.statusCode).toBe(200);
+    expect(unarchiveRes.json().archived).toBe(false);
+  });
+
+  it('PATCH /api/runs/:id returns 404 for unknown id', async () => {
+    const res = await app.inject({
+      method: 'PATCH', url: '/api/runs/nonexistent', payload: { archived: true },
+    });
+    expect(res.statusCode).toBe(404);
   });
 });

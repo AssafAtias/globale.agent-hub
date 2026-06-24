@@ -30,6 +30,7 @@ export const runs = sqliteTable('runs', {
   createdAt: text('created_at').notNull(),
   startedAt: text('started_at'),
   finishedAt: text('finished_at'),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const runners = sqliteTable('runners', {

@@ -21,6 +21,7 @@ export const RunRepository = {
       error: null,
       startedAt: null,
       finishedAt: null,
+      archived: false,
       createdAt: new Date().toISOString(),
       ...data,
     };
@@ -63,5 +64,10 @@ export const RunRepository = {
       error,
       finishedAt: new Date().toISOString(),
     }).where(eq(runs.id, id)).run();
+  },
+  setArchived(id: string, archived: boolean): RunRow | null {
+    const db = getDb();
+    db.update(runs).set({ archived }).where(eq(runs.id, id)).run();
+    return db.select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
 };

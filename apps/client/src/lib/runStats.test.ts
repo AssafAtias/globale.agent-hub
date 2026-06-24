@@ -17,6 +17,8 @@ const runs: Run[] = [
   run({ id: 'r2', agentId: 'a1', status: 'failed',  createdAt: '2026-06-24T11:00:00.000Z' }),
   run({ id: 'r3', agentId: 'a1', status: 'running', createdAt: '2026-06-24T12:00:00.000Z' }),
   run({ id: 'r4', agentId: 'a2', status: 'pending', createdAt: '2026-06-24T09:30:00.000Z' }),
+  run({ id: 'r5', agentId: 'a1', status: 'done',    createdAt: '2026-06-24T13:00:00.000Z', archived: true }),
+  run({ id: 'r6', agentId: 'a2', status: 'running', createdAt: '2026-06-24T13:30:00.000Z', archived: true }),
 ];
 
 describe('selectActiveRuns', () => {
@@ -27,7 +29,7 @@ describe('selectActiveRuns', () => {
   it('does not mutate the input array', () => {
     const input = [...runs];
     selectActiveRuns(input);
-    expect(input.map((r) => r.id)).toEqual(['r1', 'r2', 'r3', 'r4']);
+    expect(input.map((r) => r.id)).toEqual(['r1', 'r2', 'r3', 'r4', 'r5', 'r6']);
   });
 });
 
@@ -73,6 +75,25 @@ describe('filterFeed', () => {
   it('does not mutate the input array', () => {
     const input = [...runs];
     filterFeed(input, { agentId: 'a1' });
-    expect(input).toHaveLength(4);
+    expect(input).toHaveLength(6);
+  });
+});
+
+describe('archived handling', () => {
+  it('selectActiveRuns excludes archived runs', () => {
+    expect(selectActiveRuns(runs).map((r) => r.id)).toEqual(['r3', 'r4']);
+  });
+  it('computeAgentHealth ignores archived runs', () => {
+    const a1 = computeAgentHealth(runs, agents).find((h) => h.agent.id === 'a1')!;
+    // r5 (archived done) must not be counted
+    expect(a1.total).toBe(3);
+    expect(a1.done).toBe(1);
+  });
+  it('filterFeed hides archived runs by default', () => {
+    expect(filterFeed(runs, {}).map((r) => r.id)).toEqual(['r3', 'r2', 'r1', 'r4']);
+  });
+  it('filterFeed includes archived runs when showArchived is true', () => {
+    expect(filterFeed(runs, { showArchived: true }).map((r) => r.id))
+      .toEqual(['r6', 'r5', 'r3', 'r2', 'r1', 'r4']);
   });
 });
