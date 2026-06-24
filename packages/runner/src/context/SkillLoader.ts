@@ -43,9 +43,10 @@ export class SkillLoader {
         const raw = readFileSync(path, 'utf-8').replace(/\r\n/g, '\n');
         const body = stripFrontmatter(raw).trim().slice(0, MAX_SKILL_CHARS);
         const section = `### ${name}\n\n${body}`;
-        if (total + section.length > MAX_SKILLS_TOTAL_CHARS) break;
+        const sep = sections.length > 0 ? 2 : 0;
+        if (total + sep + section.length > MAX_SKILLS_TOTAL_CHARS) break;
         sections.push(section);
-        total += section.length;
+        total += sep + section.length;
       } catch {
         console.warn(`[runner] skill unreadable, skipping: ${name}`);
       }

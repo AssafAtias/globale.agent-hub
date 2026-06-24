@@ -78,4 +78,20 @@ describe('SkillLoader', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('resolves skill via frontmatter name when folder name differs (CRLF fallback path)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'skl-'));
+    try {
+      // Folder name is 'crlf-folder' but frontmatter name is 'crlf-lookup'
+      mkdirSync(join(dir, 'crlf-folder'), { recursive: true });
+      const crlfContent = '---\r\nname: crlf-lookup\r\ndescription: d\r\n---\r\nFALLBACK CRLF BODY';
+      writeFileSync(join(dir, 'crlf-folder', 'SKILL.md'), crlfContent);
+      const out = new SkillLoader(dir).load(['crlf-lookup']);
+      expect(out).toContain('### crlf-lookup');
+      expect(out).toContain('FALLBACK CRLF BODY');
+      expect(out).not.toContain('---'); // frontmatter stripped even via fallback resolve
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
