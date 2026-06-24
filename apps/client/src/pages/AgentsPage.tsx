@@ -19,7 +19,7 @@ export function AgentsPage() {
         + New Agent
       </Button>
       {(agents ?? []).map(a => (
-        <AgentCard key={a.id} agent={a} onEdit={id => navigate(`/agents/${id}`)} />
+        <AgentCard key={a.id} agent={a} onEdit={id => navigate(`/agents/${id}/edit`)} />
       ))}
       {agents?.length === 0 && (
         <Typography color="text.secondary">No agents yet. Create one to get started.</Typography>
