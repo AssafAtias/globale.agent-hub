@@ -15,7 +15,11 @@ function setupInMemoryDb() {
       trigger_rules TEXT NOT NULL,
       outputs TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      avatar_key TEXT,
+      title TEXT,
+      bio TEXT,
+      skills TEXT NOT NULL DEFAULT '[]'
     )
   `);
   return db;
@@ -115,5 +119,36 @@ describe('Agents API', () => {
     expect(del.statusCode).toBe(204);
     const get = await app.inject({ method: 'GET', url: '/api/agents' });
     expect(get.json()).toHaveLength(0);
+  });
+
+  it('POST + GET round-trips identity fields (avatar, title, bio, skills)', async () => {
+    const post = await app.inject({
+      method: 'POST', url: '/api/agents',
+      payload: {
+        name: 'Bug Hunter', type: 'pr-review', model: 'claude-haiku-4-5',
+        prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [],
+        avatarKey: 'ember', title: 'Senior Bug Hunter',
+        bio: 'Finds what others miss.', skills: ['Code Review', 'Testing'],
+      },
+    });
+    expect(post.statusCode).toBe(201);
+    const { id } = post.json();
+    const get = await app.inject({ method: 'GET', url: `/api/agents/${id}` });
+    const body = get.json();
+    expect(body.avatarKey).toBe('ember');
+    expect(body.title).toBe('Senior Bug Hunter');
+    expect(body.bio).toBe('Finds what others miss.');
+    expect(JSON.parse(body.skills)).toEqual(['Code Review', 'Testing']);
+  });
+
+  it('defaults skills to an empty array when omitted', async () => {
+    const post = await app.inject({
+      method: 'POST', url: '/api/agents',
+      payload: {
+        name: 'Plain', type: 'pr-review', model: 'claude-haiku-4-5',
+        prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [],
+      },
+    });
+    expect(JSON.parse(post.json().skills)).toEqual([]);
   });
 });

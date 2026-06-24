@@ -8,6 +8,13 @@
       "when": 1781513008376,
       "tag": "0000_glamorous_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782293993931,
+      "tag": "0001_shocking_bedlam",
+      "breakpoints": true
     }
   ]
 }

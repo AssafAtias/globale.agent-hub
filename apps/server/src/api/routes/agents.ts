@@ -15,6 +15,10 @@ const AgentBody = Type.Object({
   }),
   outputs: Type.Array(Type.String()),
   enabled: Type.Optional(Type.Boolean()),
+  avatarKey: Type.Optional(Type.String({ maxLength: 64 })),
+  title: Type.Optional(Type.String({ maxLength: 80 })),
+  bio: Type.Optional(Type.String({ maxLength: 500 })),
+  skills: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 });
 
 export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
@@ -29,6 +33,10 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
         repos: JSON.stringify(req.body.repos),
         triggerRules: JSON.stringify(req.body.triggerRules),
         outputs: JSON.stringify(req.body.outputs),
+        avatarKey: req.body.avatarKey ?? null,
+        title: req.body.title ?? null,
+        bio: req.body.bio ?? null,
+        skills: JSON.stringify(req.body.skills ?? []),
       });
       return reply.status(201).send(agent);
     }
@@ -52,6 +60,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     if (body.repos !== undefined) patch.repos = JSON.stringify(body.repos);
     if (body.triggerRules !== undefined) patch.triggerRules = JSON.stringify(body.triggerRules);
     if (body.outputs !== undefined) patch.outputs = JSON.stringify(body.outputs);
+    if (body.skills !== undefined) patch.skills = JSON.stringify(body.skills);
     const updated = AgentRepository.update(req.params.id, patch as any);
     if (!updated) return reply.status(404).send({ error: 'Not found' });
     return updated;

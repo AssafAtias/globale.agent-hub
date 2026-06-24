@@ -11,6 +11,10 @@ export const agents = sqliteTable('agents', {
   outputs: text('outputs').notNull(),     // JSON: string[]
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull(),
+  avatarKey: text('avatar_key'),
+  title: text('title'),
+  bio: text('bio'),
+  skills: text('skills').notNull().default('[]'), // JSON: string[]
 });
 
 export const runs = sqliteTable('runs', {

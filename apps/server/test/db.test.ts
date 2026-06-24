@@ -21,7 +21,11 @@ it('inserts and retrieves an agent from in-memory DB', () => {
       trigger_rules TEXT NOT NULL,
       outputs TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      avatar_key TEXT,
+      title TEXT,
+      bio TEXT,
+      skills TEXT NOT NULL DEFAULT '[]'
     )
   `);
 

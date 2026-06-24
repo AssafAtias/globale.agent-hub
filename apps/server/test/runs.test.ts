@@ -9,7 +9,9 @@ function setupInMemoryDb() {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
       model TEXT NOT NULL, prompt TEXT NOT NULL, repos TEXT NOT NULL,
       trigger_rules TEXT NOT NULL, outputs TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+      enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+      avatar_key TEXT, title TEXT, bio TEXT,
+      skills TEXT NOT NULL DEFAULT '[]'
     );
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, trigger TEXT NOT NULL,

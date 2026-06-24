@@ -4,7 +4,13 @@ import { getDb } from '../db/client.js';
 import { agents } from '../db/schema.js';
 
 export type AgentRow = typeof agents.$inferSelect;
-export type AgentInsert = Omit<AgentRow, 'id' | 'createdAt' | 'enabled'> & { enabled?: boolean };
+export type AgentInsert = Omit<AgentRow, 'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills'> & {
+  enabled?: boolean;
+  avatarKey?: string | null;
+  title?: string | null;
+  bio?: string | null;
+  skills?: string;
+};
 
 export const AgentRepository = {
   findAll() {
@@ -19,6 +25,10 @@ export const AgentRepository = {
       id: randomUUID(),
       enabled: data.enabled ?? true,
       createdAt: new Date().toISOString(),
+      avatarKey: data.avatarKey ?? null,
+      title: data.title ?? null,
+      bio: data.bio ?? null,
+      skills: data.skills ?? '[]',
     };
     getDb().insert(agents).values(row).run();
     return row;
