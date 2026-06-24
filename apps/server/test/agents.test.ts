@@ -149,6 +149,19 @@ describe('Agents API', () => {
         prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [],
       },
     });
+    expect(post.statusCode).toBe(201);
     expect(JSON.parse(post.json().skills)).toEqual([]);
+  });
+
+  it('rejects malformed skills (empty-string entries)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/agents',
+      payload: {
+        name: 'Bad', type: 'pr-review', model: 'claude-haiku-4-5',
+        prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [],
+        skills: [''],
+      },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });

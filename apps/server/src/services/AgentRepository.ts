@@ -9,7 +9,7 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'createdAt' | 'enabled' | 'avata
   avatarKey?: string | null;
   title?: string | null;
   bio?: string | null;
-  skills?: string;
+  skills?: string; // skills is a JSON string: string[]
 };
 
 export const AgentRepository = {
