@@ -31,6 +31,7 @@ export interface Run {
 export interface Runner {
   id: string; name: string; status: string; lastSeen: string;
 }
+export interface SkillSummary { name: string; description: string; }
 
 export const api = {
   agents: {
@@ -49,5 +50,8 @@ export const api = {
   },
   runners: {
     list: () => req<Runner[]>('/api/runners'),
+  },
+  skills: {
+    list: () => req<SkillSummary[]>('/api/skills'),
   },
 };
