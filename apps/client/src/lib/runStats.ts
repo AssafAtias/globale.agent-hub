@@ -14,6 +14,7 @@ export interface AgentHealth {
 export interface FeedFilter {
   agentId?: string;
   status?: string;
+  showArchived?: boolean;
 }
 
 const ACTIVE = new Set(['pending', 'running']);
@@ -21,12 +22,12 @@ const ACTIVE = new Set(['pending', 'running']);
 const byCreatedDesc = (a: Run, b: Run): number => b.createdAt.localeCompare(a.createdAt);
 
 export function selectActiveRuns(runs: Run[]): Run[] {
-  return runs.filter((r) => ACTIVE.has(r.status)).sort(byCreatedDesc);
+  return runs.filter((r) => !r.archived && ACTIVE.has(r.status)).sort(byCreatedDesc);
 }
 
 export function computeAgentHealth(runs: Run[], agents: Agent[]): AgentHealth[] {
   return agents.map((agent) => {
-    const own = runs.filter((r) => r.agentId === agent.id).sort(byCreatedDesc);
+    const own = runs.filter((r) => r.agentId === agent.id && !r.archived).sort(byCreatedDesc);
     const done = own.filter((r) => r.status === 'done').length;
     const failed = own.filter((r) => r.status === 'failed').length;
     const running = own.filter((r) => ACTIVE.has(r.status)).length;
@@ -46,6 +47,7 @@ export function computeAgentHealth(runs: Run[], agents: Agent[]): AgentHealth[] 
 
 export function filterFeed(runs: Run[], filter: FeedFilter): Run[] {
   return runs
+    .filter((r) => (filter.showArchived ? true : !r.archived))
     .filter((r) => (filter.agentId ? r.agentId === filter.agentId : true))
     .filter((r) => (filter.status ? r.status === filter.status : true))
     .sort(byCreatedDesc);
