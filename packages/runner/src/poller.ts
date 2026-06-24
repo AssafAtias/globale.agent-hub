@@ -7,9 +7,13 @@ async function fetchMemory(config: RunnerConfig, agentId: string): Promise<{ foc
       headers: { 'x-runner-token': config.runnerToken },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return { focus: null, entries: [] };
+    if (!res.ok) {
+      console.error(`[runner] memory GET for agent ${agentId} returned ${res.status}`);
+      return { focus: null, entries: [] };
+    }
     return await res.json();
-  } catch {
+  } catch (err) {
+    console.error(`[runner] failed to fetch memory for agent ${agentId}:`, err);
     return { focus: null, entries: [] };
   }
 }
