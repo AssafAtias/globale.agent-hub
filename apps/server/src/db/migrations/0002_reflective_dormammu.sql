@@ -1,0 +1,1 @@
+ALTER TABLE `runs` ADD `archived` integer DEFAULT false NOT NULL;

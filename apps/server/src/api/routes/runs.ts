@@ -48,6 +48,18 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
       return run;
     });
 
+    app.patch('/api/runs/:id', {
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({ archived: Type.Boolean() }),
+        response: { 200: Type.Any(), 404: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const updated = RunRepository.setArchived(req.params.id, req.body.archived);
+      if (!updated) return reply.status(404).send({ error: 'Not found' });
+      return updated;
+    });
+
     // Manual trigger
     app.post('/api/runs', {
       schema: {
