@@ -111,6 +111,7 @@ export function ActivityFeed({ runs, agents, agentsById, filter, onFilterChange 
                 <Tooltip title={run.archived ? 'Unarchive' : 'Archive'}>
                   <IconButton
                     size="small"
+                    aria-label={run.archived ? 'Unarchive run' : 'Archive run'}
                     onClick={(e) => {
                       e.stopPropagation();
                       archiveMutation.mutate({ id: run.id, archived: !run.archived });
