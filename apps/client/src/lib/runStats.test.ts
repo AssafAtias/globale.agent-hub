@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Run, Agent } from '../api/client.js';
-import { selectActiveRuns, computeAgentHealth, filterFeed } from './runStats.js';
+import { selectActiveRuns, computeAgentHealth, filterFeed, recentRunMarkers } from './runStats.js';
 
 function run(p: Partial<Run> & { id: string; agentId: string; status: string; createdAt: string }): Run {
   return {
@@ -95,5 +95,23 @@ describe('archived handling', () => {
   it('filterFeed includes archived runs when showArchived is true', () => {
     expect(filterFeed(runs, { showArchived: true }).map((r) => r.id))
       .toEqual(['r6', 'r5', 'r3', 'r2', 'r1', 'r4']);
+  });
+});
+
+describe('recentRunMarkers', () => {
+  it('returns the agent\'s run statuses oldest-first, ignoring archived', () => {
+    // a1 non-archived runs: r1 done (10:00), r2 failed (11:00), r3 running (12:00)
+    expect(recentRunMarkers(runs, 'a1', 10)).toEqual(['done', 'failed', 'running']);
+  });
+  it('caps to the most recent n, still oldest-first within that window', () => {
+    expect(recentRunMarkers(runs, 'a1', 2)).toEqual(['failed', 'running']);
+  });
+  it('returns an empty array for an agent with no runs', () => {
+    expect(recentRunMarkers(runs, 'a3', 10)).toEqual([]);
+  });
+  it('does not mutate the input array', () => {
+    const input = [...runs];
+    recentRunMarkers(input, 'a1', 10);
+    expect(input).toHaveLength(6);
   });
 });

@@ -45,6 +45,15 @@ export function computeAgentHealth(runs: Run[], agents: Agent[]): AgentHealth[] 
   });
 }
 
+export function recentRunMarkers(runs: Run[], agentId: string, n: number): string[] {
+  const own = runs
+    .filter((r) => r.agentId === agentId && !r.archived)
+    .sort(byCreatedDesc) // newest first
+    .slice(0, n) // most recent n
+    .map((r) => r.status);
+  return own.reverse(); // oldest -> newest
+}
+
 export function filterFeed(runs: Run[], filter: FeedFilter): Run[] {
   return runs
     .filter((r) => (filter.showArchived ? true : !r.archived))

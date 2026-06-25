@@ -36,28 +36,17 @@ export function MonitoringDashboard() {
   const inProgress = runList.filter((r) => !r.archived && r.status === 'running').length;
 
   if (isLoading)
-    return (
-      <Box sx={{ bgcolor: colors.pageBg, m: -3, p: 3, minHeight: '100vh' }}>
-        <CircularProgress sx={{ mt: 2 }} />
-      </Box>
-    );
+    return <CircularProgress sx={{ mt: 2 }} />;
   if (isError)
-    return (
-      <Box sx={{ bgcolor: colors.pageBg, m: -3, p: 3, minHeight: '100vh' }}>
-        <Typography color="error">Failed to load. Is the server running?</Typography>
-      </Box>
-    );
+    return <Typography color="error">Failed to load. Is the server running?</Typography>;
 
   return (
-    <Box sx={{ bgcolor: colors.pageBg, m: -3, p: { xs: 2.5, md: 4 }, minHeight: '100vh' }}>
+    <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3.5 }}>
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ color: colors.text, fontSize: 34, fontWeight: 700, lineHeight: 1.1 }}>
-            Agent hub
-          </Typography>
-          <Typography sx={{ color: colors.textMuted, fontSize: 16, mt: 0.5 }}>
-            Global-E · CORE workspace
+            Activity
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
@@ -69,11 +58,7 @@ export function MonitoringDashboard() {
       </Box>
 
       <StatCards stats={stats} queuedTasks={stats.tasksQueued} />
-      <OrchestratorCard
-        assigned={stats.activeAgents}
-        inProgress={inProgress}
-        queued={stats.tasksQueued}
-      />
+      <OrchestratorCard assigned={stats.activeAgents} inProgress={inProgress} queued={stats.tasksQueued} />
       <PipelineStrip />
       <WorkerGrid cards={cards} />
       <ActivityList runs={feed} agentsById={agentsById} />

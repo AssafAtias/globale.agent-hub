@@ -24,16 +24,30 @@ import { useNavigate } from 'react-router-dom';
 import { type Agent } from '../api/client.js';
 import { useTriggerRun, useArchiveAgent, useDeleteAgent } from '../hooks/useAgents.js';
 import { AgentAvatar } from './AgentAvatar.js';
+import { StatusPill } from './StatusPill.js';
+import { Sparkline } from './Sparkline.js';
+import { summarizeTrigger, isRunningState, type AgentCardModel } from '../lib/cardView.js';
+import { relativeTime } from '../lib/dashboard.js';
 
 interface Props {
   agent: Agent;
   onEdit: (id: string) => void;
+  model?: AgentCardModel;
   dragHandleProps?: React.HTMLAttributes<HTMLElement> & { ref?: (el: HTMLElement | null) => void };
 }
 
 const MAX_VISIBLE_SKILLS = 4;
 
-export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
+function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: accent }} noWrap>{value}</Typography>
+    </Box>
+  );
+}
+
+export function AgentCard({ agent, onEdit, model, dragHandleProps }: Props) {
   const trigger = useTriggerRun();
   const archive = useArchiveAgent();
   const del = useDeleteAgent();
@@ -47,6 +61,12 @@ export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
   const skills = parse<string[]>(agent.skills, []);
   const visibleSkills = skills.slice(0, MAX_VISIBLE_SKILLS);
   const overflow = skills.length - visibleSkills.length;
+
+  const health = model?.health;
+  const running = model ? isRunningState(model.state) : false;
+  const successText = health && health.successRate !== null ? `${Math.round(health.successRate * 100)}%` : '—';
+  const lastText = health && health.lastRunAt ? relativeTime(health.lastRunAt) : '—';
+  const trig = summarizeTrigger(agent.triggerRules);
 
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', opacity: agent.archived ? 0.55 : 1 }}>
@@ -70,16 +90,19 @@ export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
                 <Typography variant="body2" color="text.secondary" noWrap>{agent.title}</Typography>
               )}
             </Box>
-            <Chip
-              label={agent.archived ? 'archived' : agent.enabled ? 'active' : 'paused'}
-              color={agent.archived ? 'warning' : agent.enabled ? 'success' : 'default'}
-              size="small"
-            />
+            {agent.archived ? (
+              <Chip label="archived" color="warning" size="small" />
+            ) : model ? (
+              <StatusPill state={model.state} />
+            ) : (
+              <Chip label={agent.enabled ? 'active' : 'paused'} color={agent.enabled ? 'success' : 'default'} size="small" />
+            )}
           </Box>
-          <Box mt={1}>
-            <Chip label={agent.type} size="small" sx={{ mr: 1 }} />
-            <Chip label={agent.model} size="small" variant="outlined" />
-          </Box>
+
+          <Typography variant="body2" color="text.secondary" mt={1} noWrap>
+            {agent.model} · {trig}
+          </Typography>
+
           {visibleSkills.length > 0 && (
             <Stack direction="row" spacing={1} mt={1} flexWrap="wrap" useFlexGap>
               {visibleSkills.map((s) => (
@@ -88,7 +111,21 @@ export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
               {overflow > 0 && <Chip label={`+${overflow}`} size="small" />}
             </Stack>
           )}
-          <Typography variant="body2" color="text.secondary" mt={1}>
+
+          {model && (
+            <>
+              <Box display="flex" justifyContent="space-between" gap={1} mt={1.5}>
+                <Metric label="Runs" value={String(health?.total ?? 0)} />
+                <Metric label="Success" value={successText} accent={successText !== '—' ? '#4ade80' : undefined} />
+                <Metric label="Last" value={lastText} />
+              </Box>
+              <Box mt={1}>
+                <Sparkline markers={model.markers} />
+              </Box>
+            </>
+          )}
+
+          <Typography variant="body2" color="text.secondary" mt={1.5} noWrap>
             {repos.join(', ') || 'No repos configured'}
           </Typography>
         </CardContent>
@@ -117,13 +154,22 @@ export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
         ) : (
           <>
             <Button size="small" onClick={() => onEdit(agent.id)}>Edit</Button>
-            <Button
-              size="small" variant="contained" startIcon={<PlayArrowIcon />}
-              onClick={() => trigger.mutate(agent.id, { onSuccess: (run) => navigate(`/runs/${run.id}`) })}
-              disabled={trigger.isPending}
-            >
-              Run
-            </Button>
+            {running && model?.latest ? (
+              <Button
+                size="small" variant="contained"
+                onClick={() => navigate(`/runs/${model.latest!.id}`)}
+              >
+                View run
+              </Button>
+            ) : (
+              <Button
+                size="small" variant="contained" startIcon={<PlayArrowIcon />}
+                onClick={() => trigger.mutate(agent.id, { onSuccess: (run) => navigate(`/runs/${run.id}`) })}
+                disabled={trigger.isPending}
+              >
+                Run
+              </Button>
+            )}
             <Tooltip title="Archive">
               <IconButton
                 size="small" sx={{ ml: 'auto' }} aria-label="Archive agent"
