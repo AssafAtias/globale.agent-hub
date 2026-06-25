@@ -1104,3 +1104,41 @@ git commit -m "feat(agents): 2-per-row grid, drag-and-drop reorder, show-archive
 **Type consistency:** `findAll({ includeArchived })`, `setArchived(id, archived)`, `reorder(ids)`, `computeReorder(ids, activeId, overId)`, `useReorderAgents().mutate(ids)`, `useArchiveAgent().mutate({ id, archived })`, and `dragHandleProps` are used with identical signatures across producer and consumer tasks. ✓
 
 **Known deviation from spec (intentional):** Spec's Testing section mentioned "Vitest + Testing Library." The client has no jsdom/RTL infra (Vitest `environment: 'node'`, only `runStats.test.ts` exists). Rather than introduce test infrastructure (out of scope, YAGNI), frontend automated testing targets the pure `computeReorder` helper (Task 5); DnD/grid/archive UI is verified by typecheck + manual run (Task 7 Step 4). This is called out explicitly, not silently skipped.
+
+---
+
+## Applying migration 0004 to existing databases
+
+This repo has **no runtime migrator** — the generated SQL in `apps/server/src/db/migrations/0004_*.sql` is applied automatically only on a fresh database (via Drizzle's `migrate()` call at server startup, which runs pending migrations on an empty DB). For pre-existing `agent-hub.db` files that were created before this feature was deployed, the `sort_order` and `archived` columns must be added manually.
+
+### Which files to update
+
+There are two database files:
+
+- `agent-hub.db` — at the repository root (used by the default server start)
+- `apps/server/agent-hub.db` — inside the server workspace (used when running from `apps/server/`)
+
+Both files must be migrated. SQLite locks the file while the server is running, so **stop the server before running the command below**.
+
+### Idempotent apply command
+
+Run this once per environment from the repository root (Node.js must be available; `better-sqlite3` is already installed as a server dependency):
+
+```bash
+node -e "for (const f of ['agent-hub.db','apps/server/agent-hub.db']) { try { const d=require('better-sqlite3')(f); const cols=d.prepare('PRAGMA table_info(agents)').all().map(c=>c.name); let added=false; if(!cols.includes('sort_order')){ d.exec('ALTER TABLE agents ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0'); added=true; } if(!cols.includes('archived')){ d.exec('ALTER TABLE agents ADD COLUMN archived INTEGER NOT NULL DEFAULT 0'); } if(added){ d.exec('UPDATE agents SET sort_order = (SELECT COUNT(*) FROM agents AS a2 WHERE a2.created_at < agents.created_at OR (a2.created_at = agents.created_at AND a2.id < agents.id))'); } console.log('migrated', f); d.close(); } catch(e){ console.log('skip', f, e.message); } }"
+```
+
+The command is idempotent: it uses `PRAGMA table_info` to check whether each column already exists before issuing the `ALTER TABLE`. The `sort_order` backfill (`UPDATE agents SET sort_order = ...`) only runs when the column was **newly added** in this invocation, so it never clobbers an existing manual order.
+
+### Expected output
+
+```
+migrated agent-hub.db
+migrated apps/server/agent-hub.db
+```
+
+If a file does not exist or is locked, you will see `skip <file> <reason>` instead, which is non-fatal — only migrate the files that are actually in use in your environment.
+
+### When to run
+
+Run this command **once per environment** (local dev, QA, staging, production) immediately before starting the updated server for the first time. After the columns exist, subsequent server restarts are safe — the command is a no-op when columns are already present.
