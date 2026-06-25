@@ -20,7 +20,9 @@ function setupInMemoryDb() {
       title TEXT,
       bio TEXT,
       skills TEXT NOT NULL DEFAULT '[]',
-      focus TEXT
+      focus TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0
     )
   `);
   return db;

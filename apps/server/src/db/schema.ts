@@ -16,6 +16,8 @@ export const agents = sqliteTable('agents', {
   bio: text('bio'),
   skills: text('skills').notNull().default('[]'), // JSON: string[]
   focus: text('focus'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const runs = sqliteTable('runs', {

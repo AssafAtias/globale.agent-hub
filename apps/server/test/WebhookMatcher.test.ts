@@ -13,7 +13,9 @@ function setupInMemoryDb() {
       enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
       avatar_key TEXT, title TEXT, bio TEXT,
       skills TEXT NOT NULL DEFAULT '[]',
-      focus TEXT
+      focus TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0
     )
   `);
   return db;
