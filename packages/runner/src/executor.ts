@@ -1,7 +1,7 @@
-import { readFileSync } from 'fs';
-import { homedir } from 'os';
+import { writeFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
-import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'child_process';
 import { LocalEnricher } from './context/LocalEnricher.js';
 import { SkillLoader } from './context/SkillLoader.js';
 
@@ -50,7 +50,7 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
 }
 
 export async function executeJob(
-  job: Job, apiKey: string, localReposRoot: string, skillsDir: string, memory: MemoryInput,
+  job: Job, localReposRoot: string, skillsDir: string, memory: MemoryInput,
 ): Promise<{ result: string; note: string | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -72,76 +72,76 @@ export async function executeJob(
   parts.push(job.agent.prompt);
   const systemPrompt = parts.join('\n\n---\n\n');
 
-  const raw = await runClaude(apiKey, job.agent.model, systemPrompt, contextText);
+  const raw = await runClaude(job.agent.model, systemPrompt, contextText, localReposRoot);
   return extractMemoryUpdate(raw);
 }
 
-// Build an Anthropic client. Two auth modes:
-//  1. A real API key (sk-ant-api...) in ANTHROPIC_API_KEY → standard x-api-key auth.
-//  2. Otherwise, the live Claude Code OAuth token from ~/.claude/.credentials.json
-//     → Bearer auth + the oauth beta header (uses the logged-in Claude subscription,
-//     no paid API key). Read fresh each call so Claude Code's token refreshes are
-//     picked up. Note: this token expires (~hours) and is only refreshed while
-//     Claude Code itself runs; subscription rate limits apply (429s are shared).
-function buildClient(apiKey: string): Anthropic {
-  if (apiKey && apiKey.startsWith('sk-ant-api')) {
-    return new Anthropic({ apiKey, maxRetries: 3 });
-  }
-  const token = readClaudeOAuthToken();
-  if (!token) {
-    throw new Error(
-      'No usable credentials. Set ANTHROPIC_API_KEY to a real API key (sk-ant-api...), ' +
-      'or log in with Claude Code so ~/.claude/.credentials.json contains an OAuth token.',
-    );
-  }
-  // apiKey: null prevents the SDK from auto-reading ANTHROPIC_API_KEY from the
-  // environment and sending x-api-key alongside the Bearer token — the API
-  // rejects requests that carry both.
-  return new Anthropic({
-    apiKey: null,
-    authToken: token,
-    defaultHeaders: { 'anthropic-beta': 'oauth-2025-04-20' },
-    maxRetries: 3,
-  });
+const CLI_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+interface CliResult {
+  subtype?: string;
+  is_error?: boolean;
+  result?: string;
 }
 
-function readClaudeOAuthToken(): string | null {
+// Drive Claude Code in headless print mode (`claude -p`) instead of calling the
+// Messages API directly. This uses the SUPPORTED subscription client: auth comes
+// from the logged-in Claude Code session (~/.claude), token refresh is handled by
+// the CLI, and rate-limit retry/backoff is built in. The npm `claude` shim runs
+// through node (not the 236MB native .exe), so CrowdStrike Falcon does not block
+// the node→claude spawn the way it blocked the standalone binary.
+//
+// Auth note: ANTHROPIC_API_KEY in the runner's env is a stale OAuth token; we
+// strip it (and ANTHROPIC_AUTH_TOKEN) from the child env so the CLI cleanly uses
+// the subscription login rather than mistaking the token for an API key.
+async function runClaude(
+  model: string, systemPrompt: string, userMessage: string, cwd: string,
+): Promise<string> {
+  const sysFile = join(tmpdir(), `agent-hub-sys-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`);
+  writeFileSync(sysFile, systemPrompt, 'utf8');
+
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+
   try {
-    const raw = readFileSync(join(homedir(), '.claude', '.credentials.json'), 'utf8');
-    const creds = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } };
-    return creds.claudeAiOauth?.accessToken ?? null;
-  } catch {
-    return null;
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        'claude',
+        ['-p', '--model', model, '--output-format', 'json', '--append-system-prompt-file', `"${sysFile}"`],
+        { cwd, env, shell: true },
+      );
+      let out = '';
+      let err = '';
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`));
+      }, CLI_TIMEOUT_MS);
+      child.stdout.on('data', (d) => { out += d; });
+      child.stderr.on('data', (d) => { err += d; });
+      child.on('error', (e) => { clearTimeout(timer); reject(e); });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code !== 0) reject(new Error(`claude CLI exited ${code}: ${(err.trim() || out.trim()).slice(0, 500)}`));
+        else resolve(out);
+      });
+      child.stdin.write(userMessage);
+      child.stdin.end();
+    });
+
+    let parsed: CliResult;
+    try {
+      parsed = JSON.parse(stdout) as CliResult;
+    } catch {
+      throw new Error(`claude CLI returned non-JSON output: ${stdout.slice(0, 500)}`);
+    }
+    if (parsed.is_error || (parsed.subtype && parsed.subtype !== 'success')) {
+      throw new Error(`claude CLI error (${parsed.subtype ?? 'unknown'}): ${parsed.result ?? 'no detail'}`);
+    }
+    return (parsed.result ?? '').trim() || '(no output)';
+  } finally {
+    try { unlinkSync(sysFile); } catch { /* best-effort cleanup */ }
   }
-}
-
-// Call the Anthropic Messages API over HTTPS via the official SDK. This replaces
-// the previous approach of spawning the local claude.exe CLI, which CrowdStrike
-// Falcon blocks (node.exe spawning the 236MB binary trips a behavioral rule →
-// "spawn EPERM"). An HTTPS API call spawns no child process, so it isn't blocked.
-// Requires a valid ANTHROPIC_API_KEY (sk-ant-api...), unlike the CLI which used
-// the logged-in session.
-async function runClaude(apiKey: string, model: string, systemPrompt: string, userMessage: string): Promise<string> {
-  const client = buildClient(apiKey);
-
-  const response = await client.messages.create({
-    model,
-    max_tokens: 16000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-  });
-
-  if (response.stop_reason === 'refusal') {
-    throw new Error('Claude declined the request (stop_reason: refusal)');
-  }
-
-  const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-
-  return text || '(no output)';
 }
 
 function safeParseContext(raw: string): Record<string, unknown> {

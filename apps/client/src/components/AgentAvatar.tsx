@@ -1,4 +1,5 @@
-import { getAvatar } from '../constants/avatars.js';
+import { useState } from 'react';
+import { resolveAvatar } from '../constants/avatars.js';
 
 interface Props { avatarKey?: string | null; name: string; size?: number; }
 
@@ -9,11 +10,12 @@ function hashHue(s: string): number {
 }
 
 export function AgentAvatar({ avatarKey, name, size = 40 }: Props) {
-  const opt = getAvatar(avatarKey);
-  const hue = opt ? opt.hue : hashHue(name || '?');
-  const bg = `hsl(${hue}, 65%, 55%)`;
+  const [broken, setBroken] = useState(false);
+  const opt = resolveAvatar(avatarKey, name);
+  const bg = `hsl(${opt?.hue ?? hashHue(name || '?')}, 65%, 55%)`;
 
-  if (!opt) {
+  // Initials fallback — only if the image fails to load.
+  if (broken || !opt) {
     const initials =
       name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
     return (
@@ -31,14 +33,14 @@ export function AgentAvatar({ avatarKey, name, size = 40 }: Props) {
   }
 
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" role="img" aria-label={`${name} avatar`}>
-      <circle cx="20" cy="20" r="20" fill={bg} />
-      <rect x="11" y="12" width="18" height="14" rx="3" fill="#fff" />
-      <circle cx="16" cy="19" r="2.2" fill={bg} />
-      <circle cx="24" cy="19" r="2.2" fill={bg} />
-      <rect x="15" y="23" width="10" height="2" rx="1" fill={bg} />
-      <rect x="19" y="7" width="2" height="5" fill="#fff" />
-      <circle cx="20" cy="6" r="2" fill="#fff" />
-    </svg>
+    <img
+      src={opt.img}
+      alt={`${name} avatar`}
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setBroken(true)}
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+    />
   );
 }
