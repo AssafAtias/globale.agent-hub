@@ -148,7 +148,8 @@ export function AgentCard({ agent, onEdit, dragHandleProps }: Props) {
           <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
           <Button
             color="error"
-            onClick={() => { del.mutate(agent.id); setConfirmOpen(false); }}
+            disabled={del.isPending}
+            onClick={() => del.mutate(agent.id, { onSuccess: () => setConfirmOpen(false) })}
           >
             Delete permanently
           </Button>
