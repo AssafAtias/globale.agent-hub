@@ -167,4 +167,50 @@ describe('Agents API', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  async function createNamed(name: string) {
+    const res = await app.inject({
+      method: 'POST', url: '/api/agents',
+      payload: { name, type: 'pr-review', model: 'm', prompt: 'p',
+        repos: [], triggerRules: { events: [] }, outputs: [] },
+    });
+    return res.json() as { id: string };
+  }
+
+  it('PATCH /api/agents/:id archives an agent and hides it from the default list', async () => {
+    const { id } = await createNamed('Archivable');
+    const patch = await app.inject({
+      method: 'PATCH', url: `/api/agents/${id}`, payload: { archived: true },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().archived).toBe(true);
+
+    const list = await app.inject({ method: 'GET', url: '/api/agents' });
+    expect(list.json()).toHaveLength(0);
+
+    const all = await app.inject({ method: 'GET', url: '/api/agents?includeArchived=true' });
+    expect(all.json()).toHaveLength(1);
+  });
+
+  it('PATCH /api/agents/:id returns 404 for unknown id', async () => {
+    const res = await app.inject({
+      method: 'PATCH', url: '/api/agents/nope', payload: { archived: true },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('PATCH /api/agents/reorder persists a new order (and is not captured by /:id)', async () => {
+    const a = await createNamed('A');
+    const b = await createNamed('B');
+    const c = await createNamed('C');
+
+    const res = await app.inject({
+      method: 'PATCH', url: '/api/agents/reorder',
+      payload: { ids: [c.id, a.id, b.id] },
+    });
+    expect(res.statusCode).toBe(204);
+
+    const list = await app.inject({ method: 'GET', url: '/api/agents' });
+    expect(list.json().map((x: { id: string }) => x.id)).toEqual([c.id, a.id, b.id]);
+  });
 });

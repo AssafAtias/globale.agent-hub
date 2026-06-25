@@ -24,8 +24,13 @@ const AgentBody = Type.Object({
 });
 
 export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
-  app.get('/api/agents', { schema: { response: { 200: Type.Array(Type.Any()) } } },
-    async () => AgentRepository.findAll()
+  app.get('/api/agents', {
+    schema: {
+      querystring: Type.Object({ includeArchived: Type.Optional(Type.Boolean()) }),
+      response: { 200: Type.Array(Type.Any()) },
+    },
+  }, async (req) =>
+    AgentRepository.findAll({ includeArchived: req.query.includeArchived ?? false })
   );
 
   app.post('/api/agents', { schema: { body: AgentBody, response: { 201: Type.Any() } } },
@@ -44,6 +49,30 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
       return reply.status(201).send(agent);
     }
   );
+
+  // Static route — MUST be declared before '/api/agents/:id' so 'reorder'
+  // is not matched as an :id param (mirrors /api/runs/next).
+  app.patch('/api/agents/reorder', {
+    schema: {
+      body: Type.Object({ ids: Type.Array(Type.String()) }),
+      response: { 204: Type.Any() },
+    },
+  }, async (req, reply) => {
+    AgentRepository.reorder(req.body.ids);
+    return reply.status(204).send();
+  });
+
+  app.patch('/api/agents/:id', {
+    schema: {
+      params: Type.Object({ id: Type.String() }),
+      body: Type.Object({ archived: Type.Boolean() }),
+      response: { 200: Type.Any(), 404: Type.Any() },
+    },
+  }, async (req, reply) => {
+    const updated = AgentRepository.setArchived(req.params.id, req.body.archived);
+    if (!updated) return reply.status(404).send({ error: 'Not found' });
+    return updated;
+  });
 
   app.get('/api/agents/:id', {
     schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Any(), 404: Type.Any() } },
