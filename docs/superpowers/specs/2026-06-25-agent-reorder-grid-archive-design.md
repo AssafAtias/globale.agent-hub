@@ -60,11 +60,13 @@ archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 
 **Migration `0004`** (drizzle-kit, out dir `apps/server/src/db/migrations`):
 
-- Add both columns.
+- Add both columns. `drizzle-kit generate` emits only the `ALTER TABLE ADD COLUMN`
+  statements — the backfill must be **hand-added to the generated migration SQL**.
 - Backfill `sort_order` for existing rows sequentially ordered by `created_at`, so
   current agents retain a stable, distinct order instead of all colliding on `0`.
-  (e.g. a correlated subquery counting earlier rows, or row-by-row update in the
-  migration script.)
+  Use a **row-by-row update** in the migration (SQLite can't do `UPDATE ... FROM`
+  with window functions cleanly), e.g. iterate ids in `created_at` order and set
+  `sort_order = i`.
 - `archived` defaults to `false` for existing rows.
 
 ## Backend
@@ -91,7 +93,9 @@ archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 - `GET /api/agents` — accept optional `?includeArchived=true` querystring (TypeBox
   `Type.Optional(Type.Boolean())`), pass through to `findAll`.
 - `PATCH /api/agents/:id` — body `{ archived: boolean }` (copied from the runs PATCH).
-  Calls `setArchived`, returns the updated row (or 204, matching runs convention).
+  Calls `setArchived`, returns **200 with the updated row** (the runs PATCH returns
+  `200`/`404`, not 204 — match that). This is a *new* route that coexists with the
+  existing **`PUT /api/agents/:id`** (full edit) — do not convert or remove the PUT.
 - `PATCH /api/agents/reorder` — body `{ ids: Type.Array(Type.String()) }`. Calls
   `reorder`. Returns 204. **Registered before** `/:id` routes so `reorder` is not
   captured as an `:id` param.
@@ -124,8 +128,10 @@ archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   (mirrors `ActivityFeed.tsx`); drives `useAgents(includeArchived)`.
 - **DnD:** wrap the grid in `DndContext` (with `PointerSensor` + `KeyboardSensor` for
   a11y) and `SortableContext` using `rectSortingStrategy`, keyed by the ordered list
-  of visible agent ids. On `dragEnd`, compute the new order with `arrayMove`, call
-  `useReorderAgents` with the full ordered non-archived id list.
+  of visible agent ids. Give `PointerSensor` an `activationConstraint`
+  (e.g. `{ distance: 5 }`) so a click on/near the handle does not race the
+  `CardActionArea` navigation. On `dragEnd`, compute the new order with `arrayMove`,
+  call `useReorderAgents` with the full ordered non-archived id list.
 - Archived agents are **not draggable** (rendered outside `SortableContext`, or with
   `disabled` sortable). When "Show archived" is on, archived cards appear after active
   ones, dimmed.
@@ -142,7 +148,8 @@ archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
     `useArchiveAgent(id, true)`).
   - Archived agent: `Unarchive` icon button (`UnarchiveIcon` →
     `useArchiveAgent(id, false)`) + `Delete permanently` (`useDeleteAgent`, with a
-    confirm dialog). Run/Edit may be hidden or disabled for archived agents.
+    confirm dialog). **Run and Edit are disabled** while archived (an archived agent is
+    inactive and must not be triggered); they re-enable on unarchive.
 
 ## Data Flow
 
@@ -181,9 +188,13 @@ archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   - Route tests for `PATCH /:id`, `PATCH /reorder` (route ordering — `/reorder` not
     swallowed by `/:id`), and `GET ?includeArchived`.
   - Migration `0004` backfills distinct `sort_order` values for pre-existing rows.
-- **Frontend (Playwright component / existing client test setup):**
-  - Grid renders 2 columns at `sm`+.
-  - Drag reorder fires `reorder` with the expected id order; optimistic update + rollback.
+- **Frontend (Vitest + Testing Library — the client's existing setup; no Playwright,
+  to avoid net-new test-infra scope):**
+  - The grid container applies the 2-column `gridTemplateColumns` `sx` (note: true
+    responsive `sm+` rendering can't be asserted in jsdom — assert the style is wired,
+    not the rendered column count).
+  - Drag reorder fires `reorder` with the expected id order; optimistic update + rollback
+    (drive `dragEnd` via the handler / mocked dnd events rather than real pointer drag).
   - Archive removes a card from the default view; "Show archived" reveals it dimmed and
     non-draggable; Unarchive restores it.
   - "Delete permanently" only present on archived agents and is confirm-gated.
