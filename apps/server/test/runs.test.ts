@@ -194,4 +194,19 @@ describe('Runs API', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('POST /api/runs returns 409 for an archived agent', async () => {
+    const agent = await createAgent();
+    // Archive the agent via PATCH /api/agents/:id
+    await app.inject({
+      method: 'PATCH', url: `/api/agents/${agent.id}`,
+      payload: { archived: true },
+    });
+    const res = await app.inject({
+      method: 'POST', url: '/api/runs',
+      payload: { agentId: agent.id },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('Agent is archived');
+  });
 });

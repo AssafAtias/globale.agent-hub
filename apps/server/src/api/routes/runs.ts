@@ -64,11 +64,12 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
     app.post('/api/runs', {
       schema: {
         body: Type.Object({ agentId: Type.String() }),
-        response: { 201: Type.Any(), 404: Type.Any() },
+        response: { 201: Type.Any(), 404: Type.Any(), 409: Type.Any() },
       },
     }, async (req, reply) => {
       const agent = AgentRepository.findById(req.body.agentId);
       if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+      if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
       const run = RunRepository.create({
         agentId: req.body.agentId,
         trigger: 'manual',

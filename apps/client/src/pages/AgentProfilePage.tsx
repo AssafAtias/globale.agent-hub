@@ -125,7 +125,11 @@ export function AgentProfilePage() {
       ) : <Typography color="text.secondary" variant="body2">No memory yet.</Typography>}
 
       <Box mt={3}>
-        <Button variant="outlined" onClick={() => navigate(`/agents/${agent.id}/edit`)}>
+        <Button
+          variant="outlined"
+          onClick={() => navigate(`/agents/${agent.id}/edit`)}
+          disabled={agent.archived}
+        >
           Configure agent
         </Button>
       </Box>
