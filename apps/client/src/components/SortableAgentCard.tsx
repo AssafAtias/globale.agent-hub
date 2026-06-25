@@ -2,10 +2,11 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { type Agent } from '../api/client.js';
 import { AgentCard } from './AgentCard.js';
+import { type AgentCardModel } from '../lib/cardView.js';
 
-interface Props { agent: Agent; onEdit: (id: string) => void; }
+interface Props { agent: Agent; onEdit: (id: string) => void; model?: AgentCardModel; }
 
-export function SortableAgentCard({ agent, onEdit }: Props) {
+export function SortableAgentCard({ agent, onEdit, model }: Props) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: agent.id });
 
@@ -21,6 +22,7 @@ export function SortableAgentCard({ agent, onEdit }: Props) {
       <AgentCard
         agent={agent}
         onEdit={onEdit}
+        model={model}
         dragHandleProps={{ ...attributes, ...listeners, ref: setActivatorNodeRef }}
       />
     </div>
