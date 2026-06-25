@@ -17,6 +17,8 @@ export interface Agent {
   avatarKey?: string | null; title?: string | null; bio?: string | null;
   focus?: string | null;
   skills: string; // JSON: string[]
+  sortOrder: number;
+  archived: boolean;
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
@@ -38,10 +40,15 @@ export interface SkillSummary { name: string; description: string; }
 
 export const api = {
   agents: {
-    list: () => req<Agent[]>('/api/agents'),
+    list: (includeArchived = false) =>
+      req<Agent[]>(`/api/agents${includeArchived ? '?includeArchived=true' : ''}`),
     get: (id: string) => req<Agent>(`/api/agents/${id}`),
     create: (body: Partial<AgentInput>) => req<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Partial<AgentInput>) => req<Agent>(`/api/agents/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    setArchived: (id: string, archived: boolean) =>
+      req<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
+    reorder: (ids: string[]) =>
+      req<void>('/api/agents/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
     delete: (id: string) => req<void>(`/api/agents/${id}`, { method: 'DELETE' }),
     memory: {
       get: (id: string) => req<AgentMemory>(`/api/agents/${id}/memory`),
