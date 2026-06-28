@@ -73,3 +73,34 @@ function helpText(slugs: string[]): string {
 function unknownAgent(slug: string, slugs: string[]): string {
   return `Unknown agent \`${slug}\`.\n\n${helpText(slugs)}`;
 }
+
+import { ActivityHandler, TurnContext } from 'botbuilder';
+import { AgentRepository } from '../AgentRepository.js';
+import { RunRepository } from '../RunRepository.js';
+import { slugify } from './slugify.js';
+
+export function createTeamsBot(allowedUserIds: string[]): ActivityHandler {
+  const bot = new ActivityHandler();
+  const deps: TeamsBotDeps = {
+    allowedUserIds,
+    agents: {
+      findBySlug: (s) => AgentRepository.findBySlug(s),
+      setTeamsTarget: (id, ref) => AgentRepository.setTeamsTarget(id, ref),
+      listSlugs: () => AgentRepository.findAll().map(a => slugify(a.name)),
+    },
+    runs: { create: (d) => RunRepository.create(d) },
+  };
+
+  bot.onMessage(async (context, next) => {
+    const turn: TeamsTurn = {
+      text: TurnContext.removeRecipientMention(context.activity) ?? context.activity.text ?? '',
+      aadObjectId: context.activity.from?.aadObjectId,
+      conversationReference: JSON.stringify(TurnContext.getConversationReference(context.activity)),
+      reply: async (t: string) => { await context.sendActivity(t); },
+    };
+    await processTeamsMessage(turn, deps);
+    await next();
+  });
+
+  return bot;
+}
