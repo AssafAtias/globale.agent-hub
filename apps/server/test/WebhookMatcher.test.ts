@@ -16,7 +16,8 @@ function setupInMemoryDb() {
       focus TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
-      workflow TEXT
+      workflow TEXT,
+      teams_target TEXT
     )
   `);
   return db;

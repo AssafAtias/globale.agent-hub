@@ -19,6 +19,7 @@ export const agents = sqliteTable('agents', {
   sortOrder: integer('sort_order').notNull().default(0),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   workflow: text('workflow'),
+  teamsTarget: text('teams_target'),
 });
 
 export const runs = sqliteTable('runs', {
@@ -38,6 +39,7 @@ export const runs = sqliteTable('runs', {
   sessionId: text('session_id'),
   pendingGate: text('pending_gate'),
   pendingResponse: text('pending_response'),
+  replyTo: text('reply_to'),
 });
 
 export const runners = sqliteTable('runners', {

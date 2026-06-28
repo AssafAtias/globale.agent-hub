@@ -25,7 +25,7 @@ describe('JiraClient.searchFirstOpenAssigned', () => {
     expect(res?.url).toBe('https://j.example.com/browse/CORE-1');
     expect(captured.jql).toContain('project = CORE');
     expect(captured.jql).toContain('assignee = currentUser()');
-    expect(captured.jql).toContain('status = "Open"');
+    expect(captured.jql).toContain('statusCategory = "To Do"');
     expect(captured.maxResults).toBe(1);
   });
 
@@ -39,5 +39,31 @@ describe('JiraClient.searchFirstOpenAssigned', () => {
     global.fetch = jest.fn(async () => ({ ok: false, status: 403 }) as any);
     const c = new JiraClient('t', 'https://j.example.com');
     await expect(c.searchFirstOpenAssigned('CORE')).rejects.toThrow('403');
+  });
+});
+
+describe('JiraClient auth headers', () => {
+  afterEach(() => { (global.fetch as any) = undefined; });
+
+  it('uses Basic auth when email is provided', async () => {
+    let capturedOpts: any = null;
+    global.fetch = jest.fn(async (_url, opts: any) => {
+      capturedOpts = opts;
+      return { ok: true, json: async () => ({ issues: [] }) } as any;
+    });
+    const c = new JiraClient('mytoken', 'https://j.example.com', 'user@example.com');
+    await c.searchFirstOpenAssigned('CORE');
+    expect(capturedOpts.headers.Authorization).toMatch(/^Basic /);
+  });
+
+  it('uses Bearer auth when email is not provided', async () => {
+    let capturedOpts: any = null;
+    global.fetch = jest.fn(async (_url, opts: any) => {
+      capturedOpts = opts;
+      return { ok: true, json: async () => ({ issues: [] }) } as any;
+    });
+    const c = new JiraClient('mytoken', 'https://j.example.com');
+    await c.searchFirstOpenAssigned('CORE');
+    expect(capturedOpts.headers.Authorization).toMatch(/^Bearer /);
   });
 });

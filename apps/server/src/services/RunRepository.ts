@@ -12,7 +12,7 @@ export const RunRepository = {
   findById(id: string) {
     return getDb().select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
-  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'>): RunRow {
+  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null }): RunRow {
     const row: RunRow = {
       id: randomUUID(),
       status: 'pending',
@@ -26,6 +26,7 @@ export const RunRepository = {
       sessionId: null,
       pendingGate: null,
       pendingResponse: null,
+      replyTo: null,
       ...data,
     };
     getDb().insert(runs).values(row).run();
@@ -38,7 +39,7 @@ export const RunRepository = {
       triggerPayload: '{}', context: '{}',
       status: 'done', runnerId: null, result: data.result, error: null,
       startedAt: now, finishedAt: now, archived: false, createdAt: now,
-      sessionId: null, pendingGate: null, pendingResponse: null,
+      sessionId: null, pendingGate: null, pendingResponse: null, replyTo: null,
     };
     getDb().insert(runs).values(row).run();
     return row;
