@@ -30,4 +30,12 @@ describe('parseTeamsCommand', () => {
   it('reports invalid when only a slug is given', () => {
     expect(parseTeamsCommand('pr-review')).toEqual({ kind: 'invalid', reason: 'No input provided for agent "pr-review"' });
   });
+
+  it('treats HELP (uppercase) as help', () => {
+    expect(parseTeamsCommand('HELP')).toEqual({ kind: 'help' });
+  });
+
+  it('rejects multi-word slug before colon', () => {
+    expect(parseTeamsCommand('pr-review please: do this')).toMatchObject({ kind: 'invalid' });
+  });
 });
