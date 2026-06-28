@@ -70,8 +70,10 @@ GitLab/Jira webhook paths are unchanged — which also avoids the CrowdStrike/`c
 spawn constraints entirely (no new child processes).
 
 The `CloudAdapter` is constructed once at app startup from the Entra credentials and shared
-between the inbound route and the outbound `TeamsNotifier` (same lifecycle as the existing
-`ContextFetcher` / `ResultDispatcher` construction).
+between the inbound route and the outbound `TeamsNotifier`. Note `ResultDispatcher` is
+currently constructed *per result POST* (`runs.ts:105`), not at startup — so the singleton
+`TeamsNotifier` is built once at startup and **injected into each per-request dispatcher**
+(rather than rebuilding the adapter every request).
 
 ## Components
 
@@ -98,6 +100,22 @@ migrator exists** — the plan includes a manual `ALTER TABLE` step against
 **`runs`** — new column:
 - `replyTo` (text, nullable) — JSON `ConversationReference` captured at trigger time for
   Teams-originated runs. Null for webhook/manual runs.
+- **`RunRepository.create` must be extended too:** its current `Pick<RunRow, 'agentId' |
+  'trigger' | 'triggerPayload' | 'context'>` signature and fixed insert field list silently
+  drop `replyTo`. Add `replyTo` to the accepted fields and the inserted row.
+
+**Agent slug source:** the inbound parser resolves agents by slug, but `AgentRow` has no
+dedicated `slug` column. The plan must decide: reuse an existing identity field (e.g. a
+normalized `name`) or add a `slug` column. Default: a **new `slug` column** on `agents`
+(third schema change), populated from the agent name, unique — avoids ambiguous matching.
+
+**`trigger` value:** `'teams'` is added alongside `'webhook' | 'manual'`. If `trigger` is a
+constrained TypeScript union or DB check constraint anywhere, widen it.
+
+**Migration safety:** since migrations are applied by hand (no runtime migrator), add a
+startup assertion that the new columns exist when the Teams feature is enabled, so a
+forgotten `ALTER TABLE` fails loudly with a clear message rather than as an opaque Drizzle
+error on the first Teams message.
 
 **Dispatch routing** (in `ResultDispatcher`, `teams` branch):
 1. `run.replyTo` set → reply there (conversational case).
@@ -139,7 +157,13 @@ adapter validates the inbound JWT — rejecting anything not signed by Bot Servi
 5. **Capture reply target** — `getConversationReference(activity)` → run's `replyTo`.
 6. **Create run** — `RunRepository.create({ agentId, trigger:'teams', triggerPayload,
    context: <input>, replyTo })`. `trigger:'teams'` is a new trigger value.
-7. **Ack** — immediate "🚀 Running `<slug>`…" reply so the user gets instant feedback.
+7. **Ack** — *after* the run is created, send an immediate "🚀 Running `<slug>`…" reply.
+   Ack failure is logged but non-fatal (the run already exists; the result will still post
+   later) — consistent with the outbound `.catch` contract.
+
+Parser robustness: `removeRecipientMention` can leave residual `<at>` markup / leading
+whitespace, and behaves differently in personal vs. channel scope. The parser must trim
+robustly; both scopes are covered by parser unit tests.
 
 The input text becomes the run's `context` (piped to Claude via stdin by the executor).
 Threading: the conversation reference carries the thread id, so ack + result land in-thread.
