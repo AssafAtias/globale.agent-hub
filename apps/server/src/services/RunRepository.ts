@@ -23,6 +23,9 @@ export const RunRepository = {
       finishedAt: null,
       archived: false,
       createdAt: new Date().toISOString(),
+      sessionId: null,
+      pendingGate: null,
+      pendingResponse: null,
       ...data,
     };
     getDb().insert(runs).values(row).run();

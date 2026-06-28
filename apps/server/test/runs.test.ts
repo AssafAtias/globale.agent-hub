@@ -14,7 +14,8 @@ function setupInMemoryDb() {
       skills TEXT NOT NULL DEFAULT '[]',
       focus TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
-      archived INTEGER NOT NULL DEFAULT 0
+      archived INTEGER NOT NULL DEFAULT 0,
+      workflow TEXT
     );
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, trigger TEXT NOT NULL,
@@ -23,6 +24,7 @@ function setupInMemoryDb() {
       result TEXT, error TEXT, created_at TEXT NOT NULL,
       started_at TEXT, finished_at TEXT,
       archived INTEGER NOT NULL DEFAULT 0,
+      session_id TEXT, pending_gate TEXT, pending_response TEXT,
       FOREIGN KEY (agent_id) REFERENCES agents(id)
     );
     CREATE TABLE IF NOT EXISTS runners (

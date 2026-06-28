@@ -6,7 +6,7 @@ import { agents } from '../db/schema.js';
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = Omit<
   AgentRow,
-  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived'
+  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived' | 'workflow'
 > & {
   enabled?: boolean;
   avatarKey?: string | null;
@@ -14,6 +14,7 @@ export type AgentInsert = Omit<
   bio?: string | null;
   skills?: string; // JSON string: string[]
   focus?: string | null;
+  workflow?: string | null;
 };
 
 export const AgentRepository = {
@@ -44,6 +45,7 @@ export const AgentRepository = {
       bio: data.bio ?? null,
       skills: data.skills ?? '[]',
       focus: data.focus ?? null,
+      workflow: data.workflow ?? null,
       sortOrder: nextOrder,
       archived: false,
     };
