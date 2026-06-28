@@ -20,7 +20,7 @@ function assertTeamsColumns(): void {
   if (!has('agents', 'teams_target') || !has('runs', 'reply_to')) {
     throw new Error(
       'Teams is enabled but DB is missing teams_target/reply_to columns. ' +
-      'Apply migration 0005_teams_integration.sql to agent-hub.db (server stopped) before starting.',
+      'Apply migration 0006_teams_integration.sql to agent-hub.db (server stopped) before starting.',
     );
   }
 }

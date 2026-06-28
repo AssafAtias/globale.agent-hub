@@ -112,6 +112,20 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
 
       if (req.body.error) {
         RunRepository.fail(req.params.id, req.body.error);
+        if (teamsNotifier) {
+          const failedRun = RunRepository.findById(req.params.id);
+          if (failedRun?.replyTo) {
+            const agent = AgentRepository.findById(failedRun.agentId);
+            try {
+              await teamsNotifier.post(
+                JSON.parse(failedRun.replyTo),
+                `**${agent?.name ?? 'Agent'}** failed: ${req.body.error}`,
+              );
+            } catch (e) {
+              app.log.error(e, 'Teams failure-notify error');
+            }
+          }
+        }
       } else {
         RunRepository.complete(req.params.id, req.body.result ?? '');
         // Fan out result to configured outputs (fire-and-forget)

@@ -41,8 +41,10 @@ describe('processTeamsMessage', () => {
     const { turn, replies } = makeTurn();
     const { deps, created } = makeDeps();
     await processTeamsMessage(turn, deps);
-    expect(created[0]).toMatchObject({
-      agentId: 'agent-1', trigger: 'teams', context: 'do it',
+    const created0 = created[0];
+    expect(JSON.parse(created0.context)).toEqual({ 'User request': 'do it' });
+    expect(created0).toMatchObject({
+      agentId: 'agent-1', trigger: 'teams',
       replyTo: '{"conversation":{"id":"c1"}}',
     });
     expect(replies[0]).toMatch(/running/i);
@@ -58,10 +60,11 @@ describe('processTeamsMessage', () => {
 
   it('handles set-channel by saving the conversation reference', async () => {
     const { turn, replies } = makeTurn({ text: 'set-channel pr-review' });
-    const { deps, targets } = makeDeps();
+    const { deps, targets, created } = makeDeps();
     await processTeamsMessage(turn, deps);
     expect(targets[0]).toEqual({ id: 'agent-1', ref: '{"conversation":{"id":"c1"}}' });
     expect(replies[0]).toMatch(/will post here/i);
+    expect(created).toHaveLength(0);
   });
 
   it('errors clearly for an unknown slug', async () => {
@@ -77,5 +80,14 @@ describe('processTeamsMessage', () => {
     const { deps, created } = makeDeps();
     await expect(processTeamsMessage(turn, deps)).resolves.toBeUndefined();
     expect(created).toHaveLength(1); // run still created
+  });
+
+  it('stores context as a JSON object string the runner can parse', async () => {
+    const { turn } = makeTurn({ text: 'pr-review: investigate the bug' });
+    const { deps, created } = makeDeps();
+    await processTeamsMessage(turn, deps);
+    const parsed = JSON.parse(created[0].context);
+    expect(typeof parsed).toBe('object');
+    expect(Object.values(parsed)).toContain('investigate the bug');
   });
 });

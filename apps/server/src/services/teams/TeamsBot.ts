@@ -62,7 +62,7 @@ export async function processTeamsMessage(turn: TeamsTurn, deps: TeamsBotDeps): 
     agentId: agent.id,
     trigger: 'teams',
     triggerPayload: JSON.stringify({ source: 'teams', aadObjectId: turn.aadObjectId }),
-    context: cmd.input,
+    context: JSON.stringify({ 'User request': cmd.input }),
     replyTo: turn.conversationReference,
   });
 
