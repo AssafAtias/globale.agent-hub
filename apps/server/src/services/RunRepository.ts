@@ -31,6 +31,18 @@ export const RunRepository = {
     getDb().insert(runs).values(row).run();
     return row;
   },
+  createCompleted(data: { agentId: string; trigger: string; result: string }): RunRow {
+    const now = new Date().toISOString();
+    const row: RunRow = {
+      id: randomUUID(), agentId: data.agentId, trigger: data.trigger,
+      triggerPayload: '{}', context: '{}',
+      status: 'done', runnerId: null, result: data.result, error: null,
+      startedAt: now, finishedAt: now, archived: false, createdAt: now,
+      sessionId: null, pendingGate: null, pendingResponse: null,
+    };
+    getDb().insert(runs).values(row).run();
+    return row;
+  },
   // Atomically claim the next pending run for a runner.
   // Uses better-sqlite3's synchronous transaction with BEGIN IMMEDIATE so only
   // one writer can enter at a time — no TOCTOU race between concurrent runners.
