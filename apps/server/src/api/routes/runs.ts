@@ -6,8 +6,9 @@ import { AgentRepository } from '../../services/AgentRepository.js';
 import { ResultDispatcher } from '../../services/ResultDispatcher.js';
 import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
+import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 
-export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox {
+export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
     app.get('/api/runs', { schema: { response: { 200: Type.Array(Type.Any()) } } },
       async () => RunRepository.findAll()
@@ -122,6 +123,7 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
             config.JIRA_API_TOKEN,
             config.JIRA_BASE_URL,
             config.JIRA_EMAIL,
+            teamsNotifier,
           );
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')
