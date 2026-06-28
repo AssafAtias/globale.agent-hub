@@ -1,4 +1,4 @@
-import { TeamsNotifier, formatTeamsResult } from '../../src/services/teams/TeamsNotifier.js';
+import { TeamsNotifier, formatTeamsResult, createTeamsAdapter } from '../../src/services/teams/TeamsNotifier.js';
 
 describe('formatTeamsResult', () => {
   it('prefixes the agent name', () => {
@@ -25,5 +25,11 @@ describe('TeamsNotifier.post', () => {
     await notifier.post({ conversation: { id: 'c1' } }, 'hello');
     expect(calls[0]).toMatchObject({ appId: 'app-1', ref: { conversation: { id: 'c1' } } });
     expect(calls[1]).toEqual({ sent: 'hello' });
+  });
+});
+
+describe('createTeamsAdapter', () => {
+  it('throws when MICROSOFT_APP_ID is absent', () => {
+    expect(() => createTeamsAdapter({} as any)).toThrow('MICROSOFT_APP_ID');
   });
 });
