@@ -47,6 +47,13 @@ export class ContextFetcher {
     return ctx;
   }
 
+  async fetchOpenAssignedTicket(projectKey?: string): Promise<FetchedContext | null> {
+    if (!this.jira) return null;
+    const ticket = await this.jira.searchFirstOpenAssigned(projectKey);
+    if (!ticket) return null;
+    return { rawPayload: {}, ticket };
+  }
+
   serializeForRunner(ctx: FetchedContext): string {
     const parts: Record<string, string> = {};
     if (ctx.mr) {
