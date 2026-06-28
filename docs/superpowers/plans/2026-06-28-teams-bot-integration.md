@@ -31,7 +31,7 @@
 - `apps/server/src/services/teams/TeamsBot.ts` — `processTeamsMessage(turn, deps)` (pure, testable) + `createTeamsBot(deps)` (ActivityHandler that adapts `TurnContext` → `turn`).
 - `apps/server/src/services/teams/TeamsNotifier.ts` — `createTeamsAdapter(config)`, `TeamsNotifier` (proactive send), `formatTeamsResult(result, agent)`.
 - `apps/server/src/api/routes/teams.ts` — `POST /api/messages` route.
-- `apps/server/src/db/migrations/0005_teams_integration.sql` — hand-written ALTERs.
+- `apps/server/src/db/migrations/0006_teams_integration.sql` — hand-written ALTERs (0005 is taken by the in-flight gated-workflow migration).
 - `apps/server/teams-app/manifest.json`, `apps/server/teams-app/README.md`, two PNG icons.
 - `apps/server/teams-app/PROVISIONING.md` — discovery-spike outcome / IT escalation packet.
 - Tests: `apps/server/test/teams/parseTeamsCommand.test.ts`, `allowlist.test.ts`, `slugify.test.ts`, `TeamsBot.test.ts`, `resultDispatcherTeams.test.ts`, `teamsRoute.test.ts`.
@@ -210,7 +210,7 @@ git commit -m "feat(teams): add Teams env config, feature gate, and botbuilder d
 
 **Files:**
 - Modify: `apps/server/src/db/schema.ts`
-- Create: `apps/server/src/db/migrations/0005_teams_integration.sql`
+- Create: `apps/server/src/db/migrations/0006_teams_integration.sql`
 - Modify: `apps/server/src/services/RunRepository.ts`
 - Modify (test in-memory `agents` schema, add `teams_target TEXT`): `apps/server/test/agentMemory.test.ts`, `agentRepository.test.ts`, `db.test.ts`, `agents.test.ts`, `WebhookMatcher.test.ts`, `migration.test.ts`, `runs.test.ts`
 - Modify (test in-memory `runs` schema, add `reply_to TEXT`): `apps/server/test/runRepository.test.ts`, `runs.test.ts`
@@ -327,7 +327,7 @@ In `runRepository.test.ts` and `runs.test.ts`, in the `CREATE TABLE ... runs (` 
 
 - [ ] **Step 8: Write the hand-written migration**
 
-Create `apps/server/src/db/migrations/0005_teams_integration.sql`:
+Create `apps/server/src/db/migrations/0006_teams_integration.sql` (0005 is the existing gated-workflow migration):
 
 ```sql
 ALTER TABLE `agents` ADD `teams_target` text;--> statement-breakpoint
@@ -336,7 +336,7 @@ ALTER TABLE `runs` ADD `reply_to` text;
 
 - [ ] **Step 9: Check migration.test.ts expectations**
 
-Open `apps/server/test/migration.test.ts`. If it asserts a fixed migration-file count or a specific schema snapshot, update that expectation to include `0005_teams_integration.sql`. Run it: `cd apps/server && npx jest test/migration.test.ts` → PASS.
+Open `apps/server/test/migration.test.ts`. If it asserts a fixed migration-file count or a specific schema snapshot, update that expectation to include `0006_teams_integration.sql`. Run it: `cd apps/server && npx jest test/migration.test.ts` → PASS.
 
 - [ ] **Step 10: Run the full server suite**
 
@@ -346,7 +346,7 @@ Expected: all PASS (no `no such column` regressions).
 - [ ] **Step 11: Commit**
 
 ```bash
-git add apps/server/src/db/schema.ts apps/server/src/db/migrations/0005_teams_integration.sql apps/server/src/services/RunRepository.ts apps/server/test
+git add apps/server/src/db/schema.ts apps/server/src/db/migrations/0006_teams_integration.sql apps/server/src/services/RunRepository.ts apps/server/test
 git commit -m "feat(teams): add teams_target/reply_to columns and migration"
 ```
 
