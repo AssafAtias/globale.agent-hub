@@ -1,0 +1,29 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "<MICROSOFT_APP_ID>",
+  "developer": {
+    "name": "Global-E",
+    "websiteUrl": "https://www.global-e.com",
+    "privacyUrl": "https://www.global-e.com/privacy",
+    "termsOfUseUrl": "https://www.global-e.com/terms"
+  },
+  "name": { "short": "Agent Hub", "full": "Global-E Agent Hub" },
+  "description": {
+    "short": "Talk to and get reports from Global-E agents.",
+    "full": "Trigger Global-E agent-hub agents from Teams and receive their run results."
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#1F6FEB",
+  "bots": [
+    {
+      "botId": "<MICROSOFT_APP_ID>",
+      "scopes": ["personal", "team"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": []
+}
