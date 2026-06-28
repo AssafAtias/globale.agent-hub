@@ -4,6 +4,7 @@ import { RunRepository } from '../../services/RunRepository.js';
 import { RunnerRepository } from '../../services/RunnerRepository.js';
 import { AgentRepository } from '../../services/AgentRepository.js';
 import { ResultDispatcher } from '../../services/ResultDispatcher.js';
+import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
 
 export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox {
@@ -64,17 +65,31 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
     app.post('/api/runs', {
       schema: {
         body: Type.Object({ agentId: Type.String() }),
-        response: { 201: Type.Any(), 404: Type.Any(), 409: Type.Any() },
+        response: { 201: Type.Any(), 400: Type.Any(), 404: Type.Any(), 409: Type.Any() },
       },
     }, async (req, reply) => {
       const agent = AgentRepository.findById(req.body.agentId);
       if (!agent) return reply.status(404).send({ error: 'Agent not found' });
       if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
+      if (agent.type === 'ticket-to-code') {
+        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL) {
+          return reply.status(400).send({ error: 'Jira is not configured; cannot search for tickets' });
+        }
+        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL);
+        const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
+        if (!ctx) {
+          return reply.status(201).send(
+            RunRepository.createCompleted({ agentId: agent.id, trigger: 'manual', result: 'No open tasks found.' })
+          );
+        }
+        return reply.status(201).send(RunRepository.create({
+          agentId: agent.id, trigger: 'manual',
+          triggerPayload: JSON.stringify({ issue: { key: ctx.ticket!.key } }),
+          context: fetcher.serializeForRunner(ctx),
+        }));
+      }
       const run = RunRepository.create({
-        agentId: req.body.agentId,
-        trigger: 'manual',
-        triggerPayload: '{}',
-        context: '{}',
+        agentId: req.body.agentId, trigger: 'manual', triggerPayload: '{}', context: '{}',
       });
       return reply.status(201).send(run);
     });

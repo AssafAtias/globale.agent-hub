@@ -197,6 +197,29 @@ describe('Runs API', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  async function createTicketAgent() {
+    const res = await app.inject({
+      method: 'POST', url: '/api/agents',
+      payload: { name: 'T2MR', type: 'ticket-to-code', model: 'claude-haiku-4-5',
+        prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [] },
+    });
+    return res.json() as { id: string };
+  }
+
+  it('ticket-to-code manual run returns 400 when Jira not configured', async () => {
+    const agent = await createTicketAgent();
+    const res = await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/Jira/i);
+  });
+
+  it('non-ticket-to-code manual run still creates a pending run', async () => {
+    const agent = await createAgent(); // type pr-review
+    const res = await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().status).toBe('pending');
+  });
+
   it('POST /api/runs returns 409 for an archived agent', async () => {
     const agent = await createAgent();
     // Archive the agent via PATCH /api/agents/:id
