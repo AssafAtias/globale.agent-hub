@@ -2,7 +2,9 @@
 
 **Date:** 2026-06-28
 **Repo:** globale.agent-hub
-**Status:** Approved (design)
+**Status:** Superseded by `2026-06-28-interactive-gated-workflow-design.md`
+(the ticket-selection described here becomes "step 1" of that larger feature;
+kept for reference)
 
 ## Problem
 
