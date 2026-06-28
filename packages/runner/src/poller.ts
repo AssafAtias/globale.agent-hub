@@ -65,7 +65,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
 
       try {
         const memory = await fetchMemory(config, job.run.agentId);
-        const { result, note } = await executeJob(job, config.localReposRoot, config.skillsDir, memory);
+        const { result, note } = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory);
         await postResult(config, job.run.id, { result });
         if (note) await postMemory(config, job.run.agentId, { runId: job.run.id, note });
         console.log(`[runner] Run ${job.run.id} completed`);
