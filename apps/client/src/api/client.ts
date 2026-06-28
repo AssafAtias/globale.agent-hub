@@ -19,6 +19,7 @@ export interface Agent {
   skills: string; // JSON: string[]
   sortOrder: number;
   archived: boolean;
+  teamsTarget?: string | null;
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
