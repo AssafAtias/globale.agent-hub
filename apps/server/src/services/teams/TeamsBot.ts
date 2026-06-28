@@ -1,5 +1,9 @@
 import { parseTeamsCommand } from './parseTeamsCommand.js';
 import { isAllowedUser } from './allowlist.js';
+import { ActivityHandler, TurnContext } from 'botbuilder';
+import { AgentRepository } from '../AgentRepository.js';
+import { RunRepository } from '../RunRepository.js';
+import { slugify } from './slugify.js';
 
 export interface TeamsTurn {
   text: string;
@@ -73,11 +77,6 @@ function helpText(slugs: string[]): string {
 function unknownAgent(slug: string, slugs: string[]): string {
   return `Unknown agent \`${slug}\`.\n\n${helpText(slugs)}`;
 }
-
-import { ActivityHandler, TurnContext } from 'botbuilder';
-import { AgentRepository } from '../AgentRepository.js';
-import { RunRepository } from '../RunRepository.js';
-import { slugify } from './slugify.js';
 
 export function createTeamsBot(allowedUserIds: string[]): ActivityHandler {
   const bot = new ActivityHandler();
