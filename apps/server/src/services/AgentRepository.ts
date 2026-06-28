@@ -2,6 +2,7 @@ import { eq, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { agents } from '../db/schema.js';
+import { slugify } from './teams/slugify.js';
 
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = Omit<
@@ -75,5 +76,15 @@ export const AgentRepository = {
   },
   delete(id: string) {
     getDb().delete(agents).where(eq(agents.id, id)).run();
+  },
+  findBySlug(slug: string): AgentRow | null {
+    const target = slug.trim().toLowerCase();
+    const all = getDb().select().from(agents).where(eq(agents.archived, false)).all();
+    return all.find(a => slugify(a.name) === target) ?? null;
+  },
+  setTeamsTarget(id: string, ref: string): AgentRow | null {
+    const db = getDb();
+    db.update(agents).set({ teamsTarget: ref }).where(eq(agents.id, id)).run();
+    return db.select().from(agents).where(eq(agents.id, id)).get() ?? null;
   },
 };
