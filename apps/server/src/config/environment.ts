@@ -21,6 +21,11 @@ export type Environment = {
   JIRA_BASE_URL: string;
   JIRA_PROJECT_KEY: string;
   SKILLS_DIR: string;
+  MICROSOFT_APP_ID: string | undefined;
+  MICROSOFT_APP_PASSWORD: string | undefined;
+  MICROSOFT_APP_TENANT_ID: string | undefined;
+  MICROSOFT_APP_TYPE: string | undefined;
+  TEAMS_ALLOWED_USER_IDS: string[];
 };
 
 export function loadConfig(): Environment {
@@ -34,7 +39,17 @@ export function loadConfig(): Environment {
     JIRA_BASE_URL: process.env.JIRA_BASE_URL ?? 'https://global-e.atlassian.net',
     JIRA_PROJECT_KEY: process.env.JIRA_PROJECT_KEY ?? 'CORE',
     SKILLS_DIR: process.env.SKILLS_DIR ?? 'C:\\GlobalE\\.claude\\skills',
+    MICROSOFT_APP_ID: process.env.MICROSOFT_APP_ID,
+    MICROSOFT_APP_PASSWORD: process.env.MICROSOFT_APP_PASSWORD,
+    MICROSOFT_APP_TENANT_ID: process.env.MICROSOFT_APP_TENANT_ID,
+    MICROSOFT_APP_TYPE: process.env.MICROSOFT_APP_TYPE ?? 'SingleTenant',
+    TEAMS_ALLOWED_USER_IDS: (process.env.TEAMS_ALLOWED_USER_IDS ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean),
   };
 
   return config;
+}
+
+export function teamsEnabled(config: Environment): boolean {
+  return Boolean(config.MICROSOFT_APP_ID);
 }
