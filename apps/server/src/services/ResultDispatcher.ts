@@ -7,9 +7,9 @@ export class ResultDispatcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
-    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl);
+    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
   }
 
   async dispatch(run: RunRow, agent: AgentRow): Promise<void> {

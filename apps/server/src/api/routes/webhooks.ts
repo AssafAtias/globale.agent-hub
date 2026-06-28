@@ -15,6 +15,7 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
       config.GITLAB_API_TOKEN,
       config.JIRA_API_TOKEN,
       config.JIRA_BASE_URL,
+      config.JIRA_EMAIL,
     );
 
     app.post('/webhooks/gitlab', {

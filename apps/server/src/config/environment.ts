@@ -9,6 +9,7 @@ const EnvSchema = Type.Object({
   GITLAB_API_TOKEN: Type.Optional(Type.String()),
   JIRA_API_TOKEN: Type.Optional(Type.String()),
   JIRA_BASE_URL: Type.Optional(Type.String()),
+  JIRA_EMAIL: Type.Optional(Type.String()),
 });
 
 export type Environment = {
@@ -19,6 +20,7 @@ export type Environment = {
   GITLAB_API_TOKEN: string | undefined;
   JIRA_API_TOKEN: string | undefined;
   JIRA_BASE_URL: string;
+  JIRA_EMAIL: string | undefined;
   JIRA_PROJECT_KEY: string;
   SKILLS_DIR: string;
   MICROSOFT_APP_ID: string | undefined;
@@ -37,6 +39,7 @@ export function loadConfig(): Environment {
     GITLAB_API_TOKEN: process.env.GITLAB_API_TOKEN,
     JIRA_API_TOKEN: process.env.JIRA_API_TOKEN,
     JIRA_BASE_URL: process.env.JIRA_BASE_URL ?? 'https://global-e.atlassian.net',
+    JIRA_EMAIL: process.env.JIRA_EMAIL,
     JIRA_PROJECT_KEY: process.env.JIRA_PROJECT_KEY ?? 'CORE',
     SKILLS_DIR: process.env.SKILLS_DIR ?? 'C:\\GlobalE\\.claude\\skills',
     MICROSOFT_APP_ID: process.env.MICROSOFT_APP_ID,

@@ -12,9 +12,9 @@ export class ContextFetcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
-    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl);
+    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
   }
 
   async fetch(event: ParsedWebhookEvent): Promise<FetchedContext> {

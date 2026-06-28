@@ -8,13 +8,13 @@ export interface JiraTicketContext {
 }
 
 export class JiraClient {
-  constructor(private token: string, private baseUrl: string) {}
+  constructor(private token: string, private baseUrl: string, private email?: string) {}
 
   private get headers() {
-    return {
-      Authorization: `Bearer ${this.token}`,
-      'Content-Type': 'application/json',
-    };
+    const authorization = this.email
+      ? `Basic ${Buffer.from(`${this.email}:${this.token}`).toString('base64')}`
+      : `Bearer ${this.token}`;
+    return { Authorization: authorization, 'Content-Type': 'application/json' };
   }
 
   async getTicket(issueKey: string): Promise<JiraTicketContext> {
@@ -51,7 +51,7 @@ export class JiraClient {
   }
 
   async searchFirstOpenAssigned(projectKey = 'CORE'): Promise<JiraTicketContext | null> {
-    const jql = `project = ${projectKey} AND assignee = currentUser() AND status = "Open" ORDER BY created ASC`;
+    const jql = `project = ${projectKey} AND assignee = currentUser() AND statusCategory = "To Do" ORDER BY created ASC`;
     const res = await fetch(`${this.baseUrl}/rest/api/3/search/jql`, {
       method: 'POST',
       headers: this.headers,

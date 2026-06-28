@@ -72,10 +72,10 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
       if (!agent) return reply.status(404).send({ error: 'Agent not found' });
       if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
       if (agent.type === 'ticket-to-code') {
-        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL) {
-          return reply.status(400).send({ error: 'Jira is not configured; cannot search for tickets' });
+        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL || !config.JIRA_EMAIL) {
+          return reply.status(400).send({ error: 'Jira is not configured; set JIRA_API_TOKEN, JIRA_BASE_URL and JIRA_EMAIL' });
         }
-        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL);
+        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL);
         const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
         if (!ctx) {
           return reply.status(201).send(
@@ -121,6 +121,7 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
             config.GITLAB_API_TOKEN,
             config.JIRA_API_TOKEN,
             config.JIRA_BASE_URL,
+            config.JIRA_EMAIL,
           );
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')
