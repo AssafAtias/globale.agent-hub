@@ -13,7 +13,9 @@ function setupInMemoryDb() {
       avatar_key TEXT, title TEXT, bio TEXT,
       skills TEXT NOT NULL DEFAULT '[]', focus TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
-      archived INTEGER NOT NULL DEFAULT 0
+      archived INTEGER NOT NULL DEFAULT 0,
+      workflow TEXT,
+      teams_target TEXT
     );
     CREATE TABLE IF NOT EXISTS agent_memory (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, run_id TEXT,

@@ -12,7 +12,7 @@ export const RunRepository = {
   findById(id: string) {
     return getDb().select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
-  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'>): RunRow {
+  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null }): RunRow {
     const row: RunRow = {
       id: randomUUID(),
       status: 'pending',
@@ -23,7 +23,23 @@ export const RunRepository = {
       finishedAt: null,
       archived: false,
       createdAt: new Date().toISOString(),
+      sessionId: null,
+      pendingGate: null,
+      pendingResponse: null,
+      replyTo: null,
       ...data,
+    };
+    getDb().insert(runs).values(row).run();
+    return row;
+  },
+  createCompleted(data: { agentId: string; trigger: string; result: string }): RunRow {
+    const now = new Date().toISOString();
+    const row: RunRow = {
+      id: randomUUID(), agentId: data.agentId, trigger: data.trigger,
+      triggerPayload: '{}', context: '{}',
+      status: 'done', runnerId: null, result: data.result, error: null,
+      startedAt: now, finishedAt: now, archived: false, createdAt: now,
+      sessionId: null, pendingGate: null, pendingResponse: null, replyTo: null,
     };
     getDb().insert(runs).values(row).run();
     return row;

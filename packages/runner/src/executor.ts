@@ -4,6 +4,7 @@ import { join } from 'path';
 import { spawn } from 'child_process';
 import { LocalEnricher } from './context/LocalEnricher.js';
 import { SkillLoader } from './context/SkillLoader.js';
+import { WorkflowLoader } from './context/WorkflowLoader.js';
 
 export interface Job {
   run: {
@@ -17,6 +18,7 @@ export interface Job {
     prompt: string;
     repos: string;
     skills?: string;
+    workflow?: string;
   };
 }
 
@@ -50,7 +52,7 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
 }
 
 export async function executeJob(
-  job: Job, localReposRoot: string, skillsDir: string, memory: MemoryInput,
+  job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string, memory: MemoryInput,
 ): Promise<{ result: string; note: string | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -69,6 +71,8 @@ export async function executeJob(
   } else {
     parts.push(MEMORY_INSTRUCTION);
   }
+  const workflowText = new WorkflowLoader(workflowsDir).load(job.agent.workflow);
+  if (workflowText) parts.push(`## Workflow\n\n${workflowText}`);
   parts.push(job.agent.prompt);
   const systemPrompt = parts.join('\n\n---\n\n');
 

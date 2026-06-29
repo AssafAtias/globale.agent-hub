@@ -12,9 +12,9 @@ export class ContextFetcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
-    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl);
+    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
   }
 
   async fetch(event: ParsedWebhookEvent): Promise<FetchedContext> {
@@ -45,6 +45,13 @@ export class ContextFetcher {
     }
 
     return ctx;
+  }
+
+  async fetchOpenAssignedTicket(projectKey?: string): Promise<FetchedContext | null> {
+    if (!this.jira) return null;
+    const ticket = await this.jira.searchFirstOpenAssigned(projectKey);
+    if (!ticket) return null;
+    return { rawPayload: {}, ticket };
   }
 
   serializeForRunner(ctx: FetchedContext): string {

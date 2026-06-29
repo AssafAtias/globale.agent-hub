@@ -4,9 +4,11 @@ import { RunRepository } from '../../services/RunRepository.js';
 import { RunnerRepository } from '../../services/RunnerRepository.js';
 import { AgentRepository } from '../../services/AgentRepository.js';
 import { ResultDispatcher } from '../../services/ResultDispatcher.js';
+import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
+import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 
-export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox {
+export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
     app.get('/api/runs', { schema: { response: { 200: Type.Array(Type.Any()) } } },
       async () => RunRepository.findAll()
@@ -64,17 +66,31 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
     app.post('/api/runs', {
       schema: {
         body: Type.Object({ agentId: Type.String() }),
-        response: { 201: Type.Any(), 404: Type.Any(), 409: Type.Any() },
+        response: { 201: Type.Any(), 400: Type.Any(), 404: Type.Any(), 409: Type.Any() },
       },
     }, async (req, reply) => {
       const agent = AgentRepository.findById(req.body.agentId);
       if (!agent) return reply.status(404).send({ error: 'Agent not found' });
       if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
+      if (agent.type === 'ticket-to-code') {
+        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL || !config.JIRA_EMAIL) {
+          return reply.status(400).send({ error: 'Jira is not configured; set JIRA_API_TOKEN, JIRA_BASE_URL and JIRA_EMAIL' });
+        }
+        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL);
+        const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
+        if (!ctx) {
+          return reply.status(201).send(
+            RunRepository.createCompleted({ agentId: agent.id, trigger: 'manual', result: 'No open tasks found.' })
+          );
+        }
+        return reply.status(201).send(RunRepository.create({
+          agentId: agent.id, trigger: 'manual',
+          triggerPayload: JSON.stringify({ issue: { key: ctx.ticket!.key } }),
+          context: fetcher.serializeForRunner(ctx),
+        }));
+      }
       const run = RunRepository.create({
-        agentId: req.body.agentId,
-        trigger: 'manual',
-        triggerPayload: '{}',
-        context: '{}',
+        agentId: req.body.agentId, trigger: 'manual', triggerPayload: '{}', context: '{}',
       });
       return reply.status(201).send(run);
     });
@@ -96,6 +112,20 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
 
       if (req.body.error) {
         RunRepository.fail(req.params.id, req.body.error);
+        if (teamsNotifier) {
+          const failedRun = RunRepository.findById(req.params.id);
+          if (failedRun?.replyTo) {
+            const agent = AgentRepository.findById(failedRun.agentId);
+            try {
+              await teamsNotifier.post(
+                JSON.parse(failedRun.replyTo),
+                `**${agent?.name ?? 'Agent'}** failed: ${req.body.error}`,
+              );
+            } catch (e) {
+              app.log.error(e, 'Teams failure-notify error');
+            }
+          }
+        }
       } else {
         RunRepository.complete(req.params.id, req.body.result ?? '');
         // Fan out result to configured outputs (fire-and-forget)
@@ -106,6 +136,8 @@ export function buildRunsRoutes(config: Environment): FastifyPluginAsyncTypebox 
             config.GITLAB_API_TOKEN,
             config.JIRA_API_TOKEN,
             config.JIRA_BASE_URL,
+            config.JIRA_EMAIL,
+            teamsNotifier,
           );
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')

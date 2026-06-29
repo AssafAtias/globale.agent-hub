@@ -37,6 +37,7 @@ export function AgentConfigPage() {
   const [bio, setBio] = useState('');
   const [focus, setFocus] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
+  const [teamsTarget, setTeamsTarget] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function AgentConfigPage() {
         setFocus(a.focus ?? '');
         const skillList = (() => { try { return JSON.parse(a.skills || '[]') as string[]; } catch { return [] as string[]; } })();
         setSkills(skillList);
+        setTeamsTarget(a.teamsTarget ?? null);
       }).catch(err => {
         if (!controller.signal.aborted) setLoadError(String(err));
       });
@@ -135,6 +137,13 @@ export function AgentConfigPage() {
         <PromptEditor value={prompt} onChange={setPrompt} />
         <TriggerRulesForm value={triggerRules} onChange={v => setTriggerRules(v as typeof triggerRules)} />
         <OutputSelector value={outputs} onChange={setOutputs} />
+        {outputs.includes('teams') && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+            {teamsTarget
+              ? '✓ Teams report channel configured'
+              : 'No report channel yet — run "set-channel <slug>" in the target Teams channel.'}
+          </Typography>
+        )}
         {saveError && <Typography color="error">{saveError}</Typography>}
         <Box display="flex" gap={2}>
           <Button variant="outlined" onClick={() => navigate('/')}>Cancel</Button>

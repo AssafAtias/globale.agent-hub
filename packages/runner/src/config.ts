@@ -5,6 +5,7 @@ export interface RunnerConfig {
   anthropicApiKey: string;
   localReposRoot: string;
   skillsDir: string;
+  workflowsDir: string;
 }
 
 export function loadConfig(): RunnerConfig {
@@ -20,5 +21,6 @@ export function loadConfig(): RunnerConfig {
     anthropicApiKey: required('ANTHROPIC_API_KEY'),
     localReposRoot: process.env.LOCAL_REPOS_ROOT ?? 'C:/GlobalE',
     skillsDir: process.env.SKILLS_DIR ?? 'C:/GlobalE/.claude/skills',
+    workflowsDir: process.env.WORKFLOWS_DIR ?? 'C:/GlobalE/globale.agent-hub/workflows',
   };
 }

@@ -2,11 +2,12 @@ import { eq, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { agents } from '../db/schema.js';
+import { slugify } from './teams/slugify.js';
 
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = Omit<
   AgentRow,
-  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived'
+  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived' | 'workflow' | 'teamsTarget'
 > & {
   enabled?: boolean;
   avatarKey?: string | null;
@@ -14,6 +15,8 @@ export type AgentInsert = Omit<
   bio?: string | null;
   skills?: string; // JSON string: string[]
   focus?: string | null;
+  workflow?: string | null;
+  teamsTarget?: string | null;
 };
 
 export const AgentRepository = {
@@ -44,6 +47,8 @@ export const AgentRepository = {
       bio: data.bio ?? null,
       skills: data.skills ?? '[]',
       focus: data.focus ?? null,
+      workflow: data.workflow ?? null,
+      teamsTarget: data.teamsTarget ?? null,
       sortOrder: nextOrder,
       archived: false,
     };
@@ -71,5 +76,15 @@ export const AgentRepository = {
   },
   delete(id: string) {
     getDb().delete(agents).where(eq(agents.id, id)).run();
+  },
+  findBySlug(slug: string): AgentRow | null {
+    const target = slug.trim().toLowerCase();
+    const all = getDb().select().from(agents).where(eq(agents.archived, false)).all();
+    return all.find(a => slugify(a.name) === target) ?? null;
+  },
+  setTeamsTarget(id: string, ref: string): AgentRow | null {
+    const db = getDb();
+    db.update(agents).set({ teamsTarget: ref }).where(eq(agents.id, id)).run();
+    return db.select().from(agents).where(eq(agents.id, id)).get() ?? null;
   },
 };

@@ -8,6 +8,7 @@ const OPTIONS = [
   { value: 'pr_comment', label: 'Post comment on PR/MR' },
   { value: 'jira', label: 'Post comment on Jira ticket' },
   { value: 'draft_mr', label: 'Open draft MR with generated code' },
+  { value: 'teams', label: 'Post result to Microsoft Teams' },
 ];
 
 interface Props { value: string[]; onChange: (v: string[]) => void; }

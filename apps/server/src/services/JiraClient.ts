@@ -8,28 +8,20 @@ export interface JiraTicketContext {
 }
 
 export class JiraClient {
-  constructor(private token: string, private baseUrl: string) {}
+  constructor(private token: string, private baseUrl: string, private email?: string) {}
 
   private get headers() {
-    return {
-      Authorization: `Bearer ${this.token}`,
-      'Content-Type': 'application/json',
-    };
+    const authorization = this.email
+      ? `Basic ${Buffer.from(`${this.email}:${this.token}`).toString('base64')}`
+      : `Bearer ${this.token}`;
+    return { Authorization: authorization, 'Content-Type': 'application/json' };
   }
 
   async getTicket(issueKey: string): Promise<JiraTicketContext> {
     const res = await fetch(`${this.baseUrl}/rest/api/3/issue/${issueKey}`, { headers: this.headers });
     if (!res.ok) throw new Error(`Jira fetch failed: ${res.status}`);
     const data = await res.json() as Record<string, unknown>;
-    const fields = data['fields'] as Record<string, unknown>;
-    return {
-      key: data['key'] as string,
-      summary: fields['summary'] as string,
-      description: this.extractDescription(fields['description']),
-      status: ((fields['status'] as Record<string, unknown>)?.['name'] as string) ?? 'Unknown',
-      labels: (fields['labels'] as string[]) ?? [],
-      url: `${this.baseUrl}/browse/${data['key']}`,
-    };
+    return this.mapIssue(data);
   }
 
   async postComment(issueKey: string, body: string): Promise<void> {
@@ -44,6 +36,31 @@ export class JiraClient {
       }),
     });
     if (!res.ok) throw new Error(`Jira comment failed: ${res.status}`);
+  }
+
+  private mapIssue(data: Record<string, unknown>): JiraTicketContext {
+    const fields = data['fields'] as Record<string, unknown>;
+    return {
+      key: data['key'] as string,
+      summary: fields['summary'] as string,
+      description: this.extractDescription(fields['description']),
+      status: ((fields['status'] as Record<string, unknown>)?.['name'] as string) ?? 'Unknown',
+      labels: (fields['labels'] as string[]) ?? [],
+      url: `${this.baseUrl}/browse/${data['key']}`,
+    };
+  }
+
+  async searchFirstOpenAssigned(projectKey = 'CORE'): Promise<JiraTicketContext | null> {
+    const jql = `project = ${projectKey} AND assignee = currentUser() AND statusCategory = "To Do" ORDER BY created ASC`;
+    const res = await fetch(`${this.baseUrl}/rest/api/3/search/jql`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ jql, maxResults: 1, fields: ['summary', 'description', 'status', 'labels'] }),
+    });
+    if (!res.ok) throw new Error(`Jira search failed: ${res.status}`);
+    const data = await res.json() as { issues?: Array<Record<string, unknown>> };
+    const first = data.issues?.[0];
+    return first ? this.mapIssue(first) : null;
   }
 
   private extractDescription(desc: unknown): string {

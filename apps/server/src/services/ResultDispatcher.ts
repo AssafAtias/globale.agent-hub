@@ -1,15 +1,20 @@
 import { GitLabClient } from './GitLabClient.js';
 import { JiraClient } from './JiraClient.js';
+import { formatTeamsResult } from './teams/TeamsNotifier.js';
 import type { AgentRow } from './AgentRepository.js';
 import type { RunRow } from './RunRepository.js';
+
+interface TeamsNotifierLike { post(ref: object, text: string): Promise<void>; }
 
 export class ResultDispatcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
+  private teams?: TeamsNotifierLike;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, teamsNotifier?: TeamsNotifierLike) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
-    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl);
+    if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
+    this.teams = teamsNotifier;
   }
 
   async dispatch(run: RunRow, agent: AgentRow): Promise<void> {
@@ -28,9 +33,24 @@ export class ResultDispatcher {
           console.error('[ResultDispatcher] jira comment failed:', e)
         );
       }
+      if (output === 'teams' && this.teams) {
+        await this.postTeams(run, agent).catch(e =>
+          console.error('[ResultDispatcher] teams failed:', e)
+        );
+      }
       // 'dashboard' is always stored in runs.result — no extra action needed
       // 'draft_mr' is phase 2
     }
+  }
+
+  private async postTeams(run: RunRow, agent: AgentRow): Promise<void> {
+    if (!this.teams || !run.result) return;
+    const refJson = run.replyTo ?? agent.teamsTarget;
+    if (!refJson) {
+      console.warn('[ResultDispatcher] teams output set but no target for agent', agent.id);
+      return;
+    }
+    await this.teams.post(JSON.parse(refJson), formatTeamsResult(run.result, agent.name));
   }
 
   private async postGitLabComment(result: string, payload: Record<string, unknown>): Promise<void> {
