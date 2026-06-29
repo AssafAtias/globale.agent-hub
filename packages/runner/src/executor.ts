@@ -5,6 +5,8 @@ import { spawn } from 'child_process';
 import { LocalEnricher } from './context/LocalEnricher.js';
 import { SkillLoader } from './context/SkillLoader.js';
 import { WorkflowLoader } from './context/WorkflowLoader.js';
+import { resolveRepoPaths } from './context/repoPaths.js';
+import { buildToolArgs } from './toolPolicy.js';
 
 export interface Job {
   run: {
@@ -52,7 +54,8 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
 }
 
 export async function executeJob(
-  job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string, memory: MemoryInput,
+  job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
+  memory: MemoryInput, toolsEnabled: boolean,
 ): Promise<{ result: string; note: string | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -76,7 +79,11 @@ export async function executeJob(
   parts.push(job.agent.prompt);
   const systemPrompt = parts.join('\n\n---\n\n');
 
-  const raw = await runClaude(job.agent.model, systemPrompt, contextText, localReposRoot);
+  const repoPaths = resolveRepoPaths(localReposRoot, agentRepos);
+  const cwd = repoPaths[0] ?? localReposRoot;
+  const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths });
+
+  const raw = await runClaude(job.agent.model, systemPrompt, contextText, cwd, toolArgs);
   return extractMemoryUpdate(raw);
 }
 
@@ -99,7 +106,7 @@ interface CliResult {
 // strip it (and ANTHROPIC_AUTH_TOKEN) from the child env so the CLI cleanly uses
 // the subscription login rather than mistaking the token for an API key.
 async function runClaude(
-  model: string, systemPrompt: string, userMessage: string, cwd: string,
+  model: string, systemPrompt: string, userMessage: string, cwd: string, toolArgs: string[],
 ): Promise<string> {
   const sysFile = join(tmpdir(), `agent-hub-sys-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`);
   writeFileSync(sysFile, systemPrompt, 'utf8');
@@ -112,7 +119,7 @@ async function runClaude(
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         'claude',
-        ['-p', '--model', model, '--output-format', 'json', '--append-system-prompt-file', `"${sysFile}"`],
+        ['-p', '--model', model, '--output-format', 'json', '--append-system-prompt-file', `"${sysFile}"`, ...toolArgs],
         { cwd, env, shell: true },
       );
       let out = '';
