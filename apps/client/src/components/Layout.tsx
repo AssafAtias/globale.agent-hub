@@ -13,6 +13,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { colors } from './dashboard/palette.js';
 import { WorkspaceChip } from './WorkspaceChip.js';
 import { SidebarAccount } from './SidebarAccount.js';
+import { TeamsStatus } from './TeamsStatus.js';
 
 const DRAWER_WIDTH = 240;
 const NAV = [
@@ -83,6 +84,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </List>
 
+        <TeamsStatus />
         <SidebarAccount />
       </Drawer>
 
