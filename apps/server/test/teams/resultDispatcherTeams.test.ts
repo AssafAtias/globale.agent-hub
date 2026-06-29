@@ -39,3 +39,29 @@ describe('ResultDispatcher teams output', () => {
     await expect(d.dispatch(run({ replyTo: '{"conversation":{"id":"c1"}}' }), agent())).resolves.toBeUndefined();
   });
 });
+
+describe('ResultDispatcher teams_webhook output', () => {
+  it('calls postResult with (agentName, done, result) when output is teams_webhook and result is present', async () => {
+    const calls: any[] = [];
+    const webhook = { postResult: async (agentName: string, status: string, body: string) => { calls.push({ agentName, status, body }); } };
+    const d = new ResultDispatcher(undefined, undefined, undefined, undefined, undefined, webhook);
+    await d.dispatch(run(), agent({ outputs: JSON.stringify(['teams_webhook']) }));
+    expect(calls).toHaveLength(1);
+    expect(calls[0].agentName).toBe('PR Review');
+    expect(calls[0].status).toBe('done');
+    expect(calls[0].body).toBe('the result');
+  });
+
+  it('is a no-op when no teamsWebhook is wired (6th arg undefined)', async () => {
+    const d = new ResultDispatcher(undefined, undefined, undefined, undefined, undefined, undefined);
+    await expect(d.dispatch(run(), agent({ outputs: JSON.stringify(['teams_webhook']) }))).resolves.toBeUndefined();
+  });
+
+  it('does not call postResult when agent outputs does not include teams_webhook', async () => {
+    const calls: any[] = [];
+    const webhook = { postResult: async (agentName: string, status: string, body: string) => { calls.push({ agentName, status, body }); } };
+    const d = new ResultDispatcher(undefined, undefined, undefined, undefined, undefined, webhook);
+    await d.dispatch(run(), agent({ outputs: JSON.stringify(['dashboard']) }));
+    expect(calls).toHaveLength(0);
+  });
+});

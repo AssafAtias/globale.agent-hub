@@ -5,16 +5,19 @@ import type { AgentRow } from './AgentRepository.js';
 import type { RunRow } from './RunRepository.js';
 
 interface TeamsNotifierLike { post(ref: object, text: string): Promise<void>; }
+interface TeamsWebhookLike { postResult(agentName: string, status: 'done' | 'failed', body: string): Promise<void>; }
 
 export class ResultDispatcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
   private teams?: TeamsNotifierLike;
+  private teamsWebhook?: TeamsWebhookLike;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, teamsNotifier?: TeamsNotifierLike) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, teamsNotifier?: TeamsNotifierLike, teamsWebhook?: TeamsWebhookLike) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
     if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
     this.teams = teamsNotifier;
+    this.teamsWebhook = teamsWebhook;
   }
 
   async dispatch(run: RunRow, agent: AgentRow): Promise<void> {
@@ -37,6 +40,10 @@ export class ResultDispatcher {
         await this.postTeams(run, agent).catch(e =>
           console.error('[ResultDispatcher] teams failed:', e)
         );
+      }
+      if (output === 'teams_webhook' && this.teamsWebhook && run.result) {
+        await this.teamsWebhook.postResult(agent.name, 'done', run.result)
+          .catch(e => console.error('[ResultDispatcher] teams_webhook failed:', e));
       }
       // 'dashboard' is always stored in runs.result — no extra action needed
       // 'draft_mr' is phase 2

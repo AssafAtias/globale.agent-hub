@@ -7,9 +7,11 @@ import { ResultDispatcher } from '../../services/ResultDispatcher.js';
 import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
 import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
+import { TeamsWebhookNotifier } from '../../services/teams/TeamsWebhookNotifier.js';
 
 export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
+    const teamsWebhook = config.TEAMS_WEBHOOK_URL ? new TeamsWebhookNotifier(config.TEAMS_WEBHOOK_URL) : undefined;
     app.get('/api/runs', { schema: { response: { 200: Type.Array(Type.Any()) } } },
       async () => RunRepository.findAll()
     );
@@ -112,18 +114,23 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
 
       if (req.body.error) {
         RunRepository.fail(req.params.id, req.body.error);
-        if (teamsNotifier) {
-          const failedRun = RunRepository.findById(req.params.id);
-          if (failedRun?.replyTo) {
-            const agent = AgentRepository.findById(failedRun.agentId);
-            try {
-              await teamsNotifier.post(
-                JSON.parse(failedRun.replyTo),
-                `**${agent?.name ?? 'Agent'}** failed: ${req.body.error}`,
-              );
-            } catch (e) {
-              app.log.error(e, 'Teams failure-notify error');
-            }
+        const failedRun = RunRepository.findById(req.params.id);
+        const failAgent = failedRun ? AgentRepository.findById(failedRun.agentId) : null;
+        if (teamsNotifier && failedRun?.replyTo) {
+          try {
+            await teamsNotifier.post(
+              JSON.parse(failedRun.replyTo),
+              `**${failAgent?.name ?? 'Agent'}** failed: ${req.body.error}`,
+            );
+          } catch (e) {
+            app.log.error(e, 'Teams failure-notify error');
+          }
+        }
+        if (teamsWebhook) {
+          const failOutputs = (() => { try { return JSON.parse(failAgent?.outputs || '[]') as string[]; } catch { return [] as string[]; } })();
+          if (failAgent && failOutputs.includes('teams_webhook')) {
+            teamsWebhook.postResult(failAgent.name, 'failed', req.body.error)
+              .catch(e => app.log.error(e, 'teams_webhook failure-notify error'));
           }
         }
       } else {
@@ -138,6 +145,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
             config.JIRA_BASE_URL,
             config.JIRA_EMAIL,
             teamsNotifier,
+            teamsWebhook,
           );
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')
