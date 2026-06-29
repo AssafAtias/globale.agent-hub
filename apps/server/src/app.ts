@@ -7,6 +7,7 @@ import { buildRunsRoutes } from './api/routes/runs.js';
 import { runnersRoutes } from './api/routes/runners.js';
 import { buildWebhooksRoutes } from './api/routes/webhooks.js';
 import { buildSkillsRoutes } from './api/routes/skills.js';
+import { buildIntegrationsRoutes } from './api/routes/integrations.js';
 import { buildTeamsRoutes } from './api/routes/teams.js';
 import { createTeamsAdapter, TeamsNotifier } from './services/teams/TeamsNotifier.js';
 import { createTeamsBot } from './services/teams/TeamsBot.js';
@@ -49,6 +50,7 @@ export function buildApp(config: Environment) {
   app.register(runnersRoutes);
   app.register(buildWebhooksRoutes(config));
   app.register(buildSkillsRoutes(config.SKILLS_DIR));
+  app.register(buildIntegrationsRoutes(config));
 
   return app;
 }

@@ -39,6 +39,11 @@ export interface Runner {
 }
 export interface SkillSummary { name: string; description: string; }
 
+export interface TeamsStatus {
+  bot: { connected: boolean };
+  webhook: { connected: boolean };
+}
+
 export const api = {
   agents: {
     list: (includeArchived = false) =>
@@ -70,5 +75,8 @@ export const api = {
   },
   skills: {
     list: () => req<SkillSummary[]>('/api/skills'),
+  },
+  integrations: {
+    teams: () => req<TeamsStatus>('/api/integrations/teams'),
   },
 };
