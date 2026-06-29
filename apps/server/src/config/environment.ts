@@ -28,6 +28,7 @@ export type Environment = {
   MICROSOFT_APP_TENANT_ID: string | undefined;
   MICROSOFT_APP_TYPE: string | undefined;
   TEAMS_ALLOWED_USER_IDS: string[];
+  TEAMS_WEBHOOK_URL: string | undefined;
 };
 
 export function loadConfig(): Environment {
@@ -48,6 +49,7 @@ export function loadConfig(): Environment {
     MICROSOFT_APP_TYPE: process.env.MICROSOFT_APP_TYPE ?? 'SingleTenant',
     TEAMS_ALLOWED_USER_IDS: (process.env.TEAMS_ALLOWED_USER_IDS ?? '')
       .split(',').map(s => s.trim()).filter(Boolean),
+    TEAMS_WEBHOOK_URL: process.env.TEAMS_WEBHOOK_URL,
   };
 
   return config;
