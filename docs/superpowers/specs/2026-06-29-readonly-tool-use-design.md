@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-29
 **Repo:** `globale.agent-hub`
-**Status:** In Review
+**Status:** Approved (spec review passed)
 **Roadmap:** Phase 1A (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -60,7 +60,7 @@ the `claude.cmd` shim), every emitted token that contains a space, parenthesis,
 `--add-dir` path in double quotes — exactly as the existing code already does for
 the sys-prompt file (`"${sysFile}"`). The bare flag names (`--permission-mode`,
 `--allowedTools`, `--disallowedTools`, `--add-dir`) and the value `default` are
-not quoted.
+not quoted. (Cross-platform note: a POSIX shell also strips the literal `"` before the arg reaches `claude`, so the quoted tokens remain correct on Linux/macOS too — the quotes never leak into the tool names.)
 
 **Exact returned `string[]`** for `enabled:true`, `repoPaths = ['C:/GlobalE/Apps','C:/GlobalE/core']`:
 ```js
