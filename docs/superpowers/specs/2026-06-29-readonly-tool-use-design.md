@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-29
 **Repo:** `globale.agent-hub`
-**Status:** Approved (pending spec review)
+**Status:** In Review
 **Roadmap:** Phase 1A (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -38,43 +38,79 @@ Two new **pure** helpers keep `executor.ts` focused and unit-testable; the `runC
 resolveRepoPaths(reposRoot: string, repos: string[]): string[]
 ```
 - For each entry in `repos` (e.g. `gitlab:global-e/core/checkout/GlobalE.Core.Checkout.Apps`), take the last path segment as the repo name and resolve `join(reposRoot, name)`.
-- Return the subset of those paths that **exist** on disk (via `existsSync`), de-duplicated, order-preserving.
-- This is the logic currently inline in `LocalEnricher`; extract it here and have `LocalEnricher` call it (DRY, no behavior change).
+- Return the subset of those paths whose **directory** exists (`existsSync(dirPath)`), de-duplicated, order-preserving. Empty input or none-exist → `[]`.
+- **`LocalEnricher` refactor — preserve semantics exactly.** `LocalEnricher` today checks `existsSync(claudeMd)` (a FILE), not the directory, and reads/slices the first `CLAUDE.md` it finds. After the refactor it must call `resolveRepoPaths(reposRoot, repos)` to get existing repo **dirs**, then for each returned dir do its OWN `existsSync(join(dir, 'CLAUDE.md'))` check, reading+slicing the first hit and breaking. Do NOT assume a returned dir has a `CLAUDE.md`; the file check stays in `LocalEnricher`. This keeps current behavior (a repo dir with no `CLAUDE.md` simply yields no injected `CLAUDE.md`, as today).
 
 ### New: `packages/runner/src/toolPolicy.ts`
 ```
 buildToolArgs(opts: { enabled: boolean; repoPaths: string[] }): string[]
 ```
 - If `!enabled` → return `[]` (exact current behavior; back-compat).
-- Else return a flag array:
-  - `--permission-mode`, `default`
-  - `--allowedTools`, then the allow-list tokens (see below)
-  - `--disallowedTools`, then `Write Edit NotebookEdit`
-  - for each path in `repoPaths.slice(1)`: `--add-dir`, `<path>`
+- Else return a flag array, in this exact order so each variadic flag is
+  terminated by the next flag:
+  `--permission-mode default --allowedTools <allow-tokens…> --disallowedTools "Write" "Edit" "NotebookEdit" --add-dir "<path>"…`
+  where the trailing `--add-dir "<path>"` is repeated **once per path in `repoPaths.slice(1)`** (the non-cwd repos). When `repoPaths.length <= 1`, no `--add-dir` is emitted.
 - The **cwd** (first repo path vs `reposRoot` fallback) is decided in `runClaude`, not here — `buildToolArgs` only emits flags. `repoPaths` is passed so `--add-dir` covers the non-cwd repos.
 
-**Allow-list tokens** (passed as separate argv items, since the CLI accepts space-separated tools):
+**SHELL QUOTING (required — `runClaude` spawns with `shell: true`).** Because the
+child is spawned through the shell (`shell: true`, needed on Windows to resolve
+the `claude.cmd` shim), every emitted token that contains a space, parenthesis,
+`*`, or `:` would be mangled by `cmd.exe` if passed bare. Therefore
+`buildToolArgs` MUST wrap **every** allow-list/deny-list token and every
+`--add-dir` path in double quotes — exactly as the existing code already does for
+the sys-prompt file (`"${sysFile}"`). The bare flag names (`--permission-mode`,
+`--allowedTools`, `--disallowedTools`, `--add-dir`) and the value `default` are
+not quoted.
+
+**Exact returned `string[]`** for `enabled:true`, `repoPaths = ['C:/GlobalE/Apps','C:/GlobalE/core']`:
+```js
+[
+  '--permission-mode', 'default',
+  '--allowedTools',
+    '"Read"', '"Grep"', '"Glob"',
+    '"Bash(git log:*)"', '"Bash(git diff:*)"', '"Bash(git show:*)"', '"Bash(git status:*)"',
+    '"Bash(git blame:*)"', '"Bash(git ls-files:*)"', '"Bash(git branch:*)"', '"Bash(git rev-parse:*)"',
+  '--disallowedTools', '"Write"', '"Edit"', '"NotebookEdit"',
+  '--add-dir', '"C:/GlobalE/core"',
+]
 ```
-Read  Grep  Glob
-Bash(git log:*)  Bash(git diff:*)  Bash(git show:*)  Bash(git status:*)
-Bash(git blame:*)  Bash(git ls-files:*)  Bash(git branch:*)  Bash(git rev-parse:*)
-```
+(The first repo `C:/GlobalE/Apps` becomes `cwd` in `runClaude`, so it is NOT in `--add-dir`.) For `enabled:false` → `[]`.
 
 ### Modify: `packages/runner/src/config.ts`
 Add `toolsEnabled: boolean` derived from `process.env.AGENT_TOOLS_ENABLED` — **default true**; `false`/`0`/`no` (case-insensitive) → false.
+**Leave the existing `anthropicApiKey: required('ANTHROPIC_API_KEY')` as-is** — the runner still requires it at startup (it is stripped from the *child* env in `runClaude`, but config validation is unchanged). Do not remove the `required()` call.
 
 ### Modify: `packages/runner/src/executor.ts`
-- `executeJob` parses `job.agent.repos`, calls `resolveRepoPaths(localReposRoot, repos)`, and threads the result + `toolsEnabled` into `runClaude`. (`executeJob` gains a `toolsEnabled` parameter; `poller.ts` passes `config.toolsEnabled`.)
-- `runClaude(model, systemPrompt, userMessage, cwd, toolArgs)`:
-  - `cwd` = `repoPaths[0]` if any resolved, else `localReposRoot` (current behavior).
-  - Build argv as today plus `...toolArgs` appended after the existing flags.
-  - Everything else (env strip of `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, JSON output parsing, timeout, sys-file cleanup) unchanged.
+New explicit signatures (the only changes are the added trailing params):
 
-### Modify: `packages/runner/src/context/LocalEnricher.ts`
-Replace its inline repoName→path resolution with a call to `resolveRepoPaths` (then read `CLAUDE.md` from the first existing path). Behavior-preserving refactor.
+```ts
+export async function executeJob(
+  job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
+  memory: MemoryInput, toolsEnabled: boolean,
+): Promise<{ result: string; note: string | null }>
+
+async function runClaude(
+  model: string, systemPrompt: string, userMessage: string, cwd: string, toolArgs: string[],
+): Promise<string>
+```
+
+- In `executeJob`: parse `job.agent.repos` (reuse the existing safe-parse), call
+  `const repoPaths = resolveRepoPaths(localReposRoot, repos)`, compute
+  `const cwd = repoPaths[0] ?? localReposRoot`, and
+  `const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths })`. Then
+  `runClaude(job.agent.model, systemPrompt, contextText, cwd, toolArgs)`.
+- In `runClaude`: the `spawn` args become the current fixed flags **plus** `...toolArgs` appended after `--append-system-prompt-file "<sysFile>"`. `cwd` is the passed value (no longer hard-wired to `localReposRoot`). Everything else (env strip of `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, `shell: true`, JSON output parsing, 10-min timeout, sys-file cleanup) unchanged.
 
 ### Modify: `packages/runner/src/poller.ts`
-Pass `config.toolsEnabled` into the `executeJob` call (one new argument).
+The `executeJob` call (currently line ~68) gains `config.toolsEnabled` as the **6th** argument:
+```ts
+const { result, note } = await executeJob(
+  job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled,
+);
+```
+
+### Modify: `packages/runner/src/context/LocalEnricher.ts`
+Replace its inline repoName→path resolution with a call to `resolveRepoPaths` (see the semantics-preserving instructions in the `repoPaths.ts` section above — `LocalEnricher` keeps its own `existsSync(claudeMd)` file check).
 
 ## Data flow
 
@@ -96,8 +132,8 @@ Pass `config.toolsEnabled` into the `executeJob` call (one new argument).
 
 Vitest unit tests (matching existing `test/*.test.ts` style):
 
-- **`test/repoPaths.test.ts`** — `resolveRepoPaths`: strips `gitlab:`-style prefixes to the last segment; returns only existing dirs (use `os.tmpdir()`-created fixture dirs); preserves order; de-dupes; empty input → `[]`. (No mocking of `fs` — create real temp dirs.)
-- **`test/toolPolicy.test.ts`** — `buildToolArgs`: `enabled:false` → `[]`; `enabled:true` → contains `--permission-mode default`, the full Read/Grep/Glob + read-only-git allow-list, `--disallowedTools Write Edit NotebookEdit`; one `--add-dir` per non-first repo path; zero `--add-dir` when ≤1 path.
+- **`test/repoPaths.test.ts`** — `resolveRepoPaths`, using real temp dirs created with `mkdtempSync` and removed in a `finally` block (matching `SkillLoader.test.ts`/`WorkflowLoader.test.ts` style): strips `gitlab:`-style prefixes to the last segment; returns only paths whose directory exists; preserves order; **de-dupes** (input `['gitlab:x/Apps','gitlab:y/Apps']` resolving to the same existing dir → one entry); empty input → `[]`; none-exist → `[]`. (No mocking of `fs`.)
+- **`test/toolPolicy.test.ts`** — `buildToolArgs`: `enabled:false` → `[]`; `enabled:true` returns the **exact array shape** shown in the toolPolicy section, including the **double-quoted** tokens (assert `args` contains `'"Bash(git log:*)"'` and `'"Read"'`, NOT bare `'Read'`); `--permission-mode default` present; `--disallowedTools` followed by `'"Write"' '"Edit"' '"NotebookEdit"'`; exactly one `--add-dir "<path>"` per non-first repo path (assert count); zero `--add-dir` when `repoPaths.length <= 1`.
 
 `runClaude` (process spawn) is not unit-tested. **Manual verification** after merge: rebuild `dist`, restart the runner, trigger a real run for an agent whose repo is checked out locally, and confirm from the result that the agent read a file it was **not** handed in `context` (e.g. it cites a function defined outside the diff). Also verify `AGENT_TOOLS_ENABLED=false` reverts to text-only.
 
@@ -114,4 +150,6 @@ Vitest unit tests (matching existing `test/*.test.ts` style):
 
 ## Deployment note
 
-Runner runs from `dist/` — after merge run `npx tsc` in `packages/runner` and restart the runner process. New env var `AGENT_TOOLS_ENABLED` is optional (defaults true); add to `.env.example`. No DB migration, no new dependencies.
+Runner runs from `dist/` — after merge run `npx tsc` in `packages/runner` and restart the runner process. No DB migration, no new dependencies.
+
+**Opt-out-required rollout (flag this):** because `toolsEnabled` defaults **true**, the moment a runner is rebuilt from `dist` and restarted it switches from text-only to agentic tool use — no env change needed to activate it. To keep the old behavior, set `AGENT_TOOLS_ENABLED=false` *before* restarting. Add `AGENT_TOOLS_ENABLED` (commented, with the default noted) to `.env.example`.
