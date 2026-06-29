@@ -9,6 +9,7 @@ const OPTIONS = [
   { value: 'jira', label: 'Post comment on Jira ticket' },
   { value: 'draft_mr', label: 'Open draft MR with generated code' },
   { value: 'teams', label: 'Post result to Microsoft Teams' },
+  { value: 'teams_webhook', label: 'Post to Teams channel (Agent-hub)' },
 ];
 
 interface Props { value: string[]; onChange: (v: string[]) => void; }
