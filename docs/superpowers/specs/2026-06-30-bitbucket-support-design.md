@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Repo:** `globale.agent-hub`
-**Status:** In Review
+**Status:** Approved (spec review passed)
 **Roadmap:** Phase 2A (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -107,8 +107,10 @@ export function parseBitbucketEvent(body: Record<string, unknown>, eventKey: str
     if (payload?.object_attributes?.iid && this.gitlab) { await this.postGitLabComment(result, payload); return; }
     // Bitbucket-shaped
     if (payload?.pullrequest && this.bitbucket) { await this.postBitbucketComment(result, payload); return; }
+    console.warn('[ResultDispatcher] pr_comment: no matching platform client for payload shape');
   }
   ```
+  (Use the repo's existing index-access/cast style — `(payload?.['object_attributes'] as Record<string, unknown>)?.['iid']`, `(payload?.['pullrequest'])` — not dotted typed access; the pseudocode above is shorthand. The trailing `console.warn` gives observability when neither shape matches or the matching client is unconfigured.)
   - `postGitLabComment` keeps its current body (just moved behind the shape check).
   - `postBitbucketComment(result, payload)`: `repo = payload.repository.full_name`, `prId = payload.pullrequest.id`; body `### Agent Hub Review\n\n${result}` → `this.bitbucket.postPrComment(repo, prId, body)`.
   - The single shape-router guarantees: only the matching client fires; a GitLab payload never hits Bitbucket and vice-versa; and Bitbucket works even when GitLab is unconfigured. The outer `.catch` log pattern is preserved.
