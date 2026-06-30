@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { Environment } from './config/environment.js';
 import { teamsEnabled } from './config/environment.js';
+import { redactUrlToken } from './services/redactUrlToken.js';
 import { agentsRoutes } from './api/routes/agents.js';
 import { buildRunsRoutes } from './api/routes/runs.js';
 import { runnersRoutes } from './api/routes/runners.js';
@@ -28,7 +29,20 @@ function assertTeamsColumns(): void {
 
 export function buildApp(config: Environment) {
   const app = Fastify({
-    logger: { level: 'info' },
+    logger: {
+      level: 'info',
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            url: redactUrlToken(request.url),
+            host: request.headers?.host,
+            remoteAddress: request.ip,
+            remotePort: request.socket?.remotePort,
+          };
+        },
+      },
+    },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   let teamsNotifier: TeamsNotifier | undefined;
