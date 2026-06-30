@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Repo:** `globale.agent-hub`
-**Status:** Approved (pending spec review)
+**Status:** Approved (spec review passed)
 **Roadmap:** Phase 2B (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -33,7 +33,7 @@ Let an enabled agent fire on a cron schedule. A server-side scheduler creates a 
 ## Components
 
 ### Dependency
-Add `croner` (latest 9.x) to `apps/server/package.json` dependencies. Import as `import { Cron } from 'croner';`. Uses `Cron#previousRun(date?)` (most recent scheduled instant before/at the given date) — verify this method exists in the installed version during implementation.
+Add `croner` (`^9.0.0`) to `apps/server/package.json` dependencies. Import as `import { Cron } from 'croner';`. Use **`Cron#previousRuns(n, referenceDate)`** (verified via docs: returns an array of the previous `n` scheduled `Date`s relative to `referenceDate`, most-recent-first). NOTE: the singular `previousRun()` is execution-tracking (no date arg, returns when *this job object* last fired) — do NOT use it. Construct the `Cron` with **no callback** (`new Cron(expr)` only) so it does not auto-schedule a live job; it is used purely for slot calculation.
 
 ### Pure helpers — `apps/server/src/services/schedule.ts`
 ```ts
@@ -41,23 +41,29 @@ export function isDue(cronExpr: string, lastScheduledAtIso: string | null, now: 
 export function parseCronFromTriggerRules(triggerRulesJson: string): string | null
 export function buildScheduledContext(reposJson: string): string
 ```
-- **`isDue`**: `const prev = new Cron(cronExpr).previousRun(now)`. Return `false` if `!prev`. Return `true` if `lastScheduledAtIso` is null (never fired). Else return `new Date(lastScheduledAtIso) < prev` (last fire predates the current slot). Wrap the `new Cron(...)` in try/catch → invalid expression returns `false`.
+- **`isDue`**: `const prev = new Cron(cronExpr).previousRuns(1, now)[0] ?? null`. Return `false` if `!prev`. Return `true` if `lastScheduledAtIso` is null (never fired). Else return `new Date(lastScheduledAtIso) < prev` (last fire predates the current slot). Wrap the whole thing in try/catch → invalid expression returns `false`.
 - **`parseCronFromTriggerRules`**: JSON-parse the agent's `triggerRules`; return a non-empty trimmed `cron` string or `null` (safe-parse → null on garbage).
 - **`buildScheduledContext`**: parse `reposJson` (string[]); return `JSON.stringify(ctx)` where `ctx` always has `'Scheduled run': 'This is a scheduled (cron) run with no triggering event. Use your available tools to inspect the repo(s) and carry out your task.'`, and — only when repos is a non-empty array — `'Repos': repos.join(', ')`. (Shape matches the runner's `formatContext`: a flat object of key→string.)
 
 ### `RunRepository.lastScheduledRun(agentId)` — `apps/server/src/services/RunRepository.ts`
-Returns the most recent `runs` row with `trigger = 'schedule'` for the agent (ordered by `createdAt` desc, limit 1), or `null`. Used for slot dedup; DB-backed so it survives restarts.
+Returns the most recent `runs` row with `trigger = 'schedule'` for the agent, or `null`. **Add `desc` to the `drizzle-orm` import** (the file currently imports `{ eq, and }` only). Exact query:
+```ts
+getDb().select().from(runs)
+  .where(and(eq(runs.agentId, agentId), eq(runs.trigger, 'schedule')))
+  .orderBy(desc(runs.createdAt)).limit(1).get() ?? null
+```
+Used for slot dedup; DB-backed so it survives restarts.
 
 ### Scheduler shell — `apps/server/src/services/Scheduler.ts`
 ```ts
 export function runDueAgents(now: Date): void   // exported for testing
 export function startScheduler(intervalMs?: number): () => void  // returns a stop fn
 ```
-- `runDueAgents(now)`: for each `AgentRepository.findAll()` that is `enabled` and not `archived`, `const cron = parseCronFromTriggerRules(agent.triggerRules)`; if `!cron` skip; `const last = RunRepository.lastScheduledRun(agent.id)?.createdAt ?? null`; if `isDue(cron, last, now)` → `RunRepository.create({ agentId: agent.id, trigger: 'schedule', triggerPayload: '{}', context: buildScheduledContext(agent.repos) })`. Each agent wrapped in try/catch (a bad agent never aborts the loop).
+- `runDueAgents(now)`: iterate `AgentRepository.findAll()` — note this **already excludes archived agents** (its `includeArchived` option defaults false), so only filter on `agent.enabled` (no `!archived` check needed). For each enabled agent, `const cron = parseCronFromTriggerRules(agent.triggerRules)`; if `!cron` skip; `const last = RunRepository.lastScheduledRun(agent.id)?.createdAt ?? null`; if `isDue(cron, last, now)` → `RunRepository.create({ agentId: agent.id, trigger: 'schedule', triggerPayload: '{}', context: buildScheduledContext(agent.repos) })`. Each agent wrapped in try/catch (a bad agent never aborts the loop).
 - `startScheduler(intervalMs = 60_000)`: define `tick = () => { try { runDueAgents(new Date()) } catch (e) { console.error('[Scheduler] tick failed:', e) } }`; run `tick()` once immediately; `const h = setInterval(tick, intervalMs)`; return `() => clearInterval(h)`.
 
 ### Wiring — `apps/server/src/index.ts`
-After `app.listen(...)` succeeds, call `startScheduler()` (import from `./services/Scheduler.js`). (Keep it inside the `listen` success path so it doesn't start if the server fails to bind.)
+Inside the existing `app.listen(..., (err) => { ... })` callback, place `startScheduler()` **after the `if (err) { … process.exit(1) }` block** (so it runs only on successful bind, not before the error check and not after the unreachable `process.exit`). Import `{ startScheduler }` from `./services/Scheduler.js`.
 
 ### Client — `apps/client/src/components/TriggerRulesForm.tsx`
 - Extend the local `TriggerRules` interface with `cron?: string`.
@@ -74,8 +80,8 @@ Invalid/empty cron → agent skipped (no crash). A throw handling one agent is c
 ## Testing (Jest)
 
 - **`test/schedule.test.ts`** — `isDue` (hourly/every-minute exprs + fixed `now` Dates for determinism): never-fired → true; last-fire after the current slot → false; last-fire before the current slot → true; invalid cron → false. `parseCronFromTriggerRules`: extracts cron, null on missing/empty/garbage. `buildScheduledContext`: always includes the preamble key; includes `Repos` for a non-empty array; omits `Repos` for empty/garbage repos JSON; output is valid JSON.
-- **`test/RunRepository.lastScheduledRun.test.ts`** (or extend an existing repo test) — in-memory DB: returns the latest `schedule`-trigger run; ignores `webhook`/`manual` runs; null when none.
-- **`test/Scheduler.test.ts`** — in-memory DB seeded with: a due enabled cron agent, a no-cron agent, a disabled cron agent, an archived cron agent. `runDueAgents(now)` creates exactly one `schedule` run (for the due enabled agent); a second immediate `runDueAgents(now)` creates no duplicate. (Use the same in-memory-DB setup pattern as `runs.test.ts`.)
+- **`test/runRepository.test.ts`** (new, camelCase per project style) — `lastScheduledRun` in-memory DB: returns the latest `schedule`-trigger run; ignores `webhook`/`manual` runs; null when none.
+- **`test/scheduler.test.ts`** — in-memory DB seeded with: a due enabled cron agent, a no-cron agent, a disabled cron agent, an archived cron agent. `runDueAgents(now)` creates exactly one `schedule` run (for the due enabled agent); a second immediate `runDueAgents(now)` creates no duplicate (dedup is reliable because `RunRepository.create` + the whole tick are synchronous on better-sqlite3 — no overlap possible in this single-process server). (Use the same in-memory-DB setup pattern as `runs.test.ts`.)
 - Client: the `cron` field renders and round-trips through `onChange` (type-level + `npm run build`; the client has no testing-library).
 
 ## Affected files
