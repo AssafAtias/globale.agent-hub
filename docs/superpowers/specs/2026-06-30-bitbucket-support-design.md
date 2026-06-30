@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Repo:** `globale.agent-hub`
-**Status:** Approved (pending spec review)
+**Status:** In Review
 **Roadmap:** Phase 2A (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -18,7 +18,10 @@ Support the **Core PR-review loop** on Bitbucket Cloud: PR webhook → fetch PR 
 - Bitbucket pipeline status / existing-PR-comments context (deferred; v1 is diff + linked Jira).
 - Bitbucket Server/Data Center (Cloud only).
 - Draft-PR creation, inline/line comments (single summary comment only).
+- `pullrequest:rejected` (PR declined) and other Bitbucket event keys — unmapped → null → 200 `{skipped}` (intentionally not handled).
 - No DB migration, no client/schema change.
+
+> Note on `runs.ts:81`: the `ticket-to-code` manual-run `ContextFetcher` gets the Bitbucket args appended too, for construction-site uniformity. `fetchOpenAssignedTicket` never uses the Bitbucket client, so the args are inert there — intentional, not dead code to remove.
 
 ## Decisions
 
@@ -48,10 +51,10 @@ export class BitbucketClient {
 }
 ```
 - **Reuses `MrContext`** (imported from `GitLabClient.ts`).
-- `getPrContext`: GET `…/2.0/repositories/${workspaceRepo}/pullrequests/${prId}` (JSON) **and** GET `…/pullrequests/${prId}/diff` (raw text), in parallel; build via `prJsonToMrContext(prJson, diff)`. Diff text sliced to a cap (e.g. 60000 chars, matching the order of the GitLab diff size). `workspaceRepo` (e.g. `globaleteam/core`) is path-segment-encoded but the `/` between workspace and repo is preserved (Bitbucket expects `{workspace}/{repo_slug}` unencoded slash).
-- `prJsonToMrContext` maps: `title`, `description ?? ''`, `source.branch.name` → `sourceBranch`, `destination.branch.name` → `targetBranch`, `links.html.href` → `mrUrl`, and the passed `diff`.
-- `postPrComment`: POST `…/pullrequests/${prId}/comments` with `{ content: { raw: body.slice(0, 32000) } }`, `Content-Type: application/json` + the auth header.
-- Auth via `bitbucketAuthHeader(this.token, this.username)`.
+- `getPrContext`: GET `…/2.0/repositories/${workspaceRepo}/pullrequests/${prId}` (JSON) **and** GET `…/2.0/repositories/${workspaceRepo}/pullrequests/${prId}/diff` (raw text — Bitbucket returns a unified-diff string, NOT JSON), in parallel; build via `prJsonToMrContext(prJson, diff)`. Diff text is **hard-capped at `60_000` chars** (`diff.slice(0, 60000)`) — a fixed value (GitLab's client has no char cap; do not try to "match" it). `workspaceRepo` (e.g. `globaleteam/core`) goes into the path with its `/` between workspace and repo-slug **preserved unencoded** (Bitbucket expects `{workspace}/{repo_slug}`); do not `encodeURIComponent` the whole thing.
+- `prJsonToMrContext` maps: `title`, `description ?? ''`, `source.branch.name` → `sourceBranch`, `destination.branch.name` → `targetBranch`, `links.html.href` → `mrUrl` (Bitbucket PR JSON nests the URL at `links.html.href`, unlike GitLab's flat `web_url`), and the passed `diff`.
+- `postPrComment`: POST `…/2.0/repositories/${workspaceRepo}/pullrequests/${prId}/comments` with `{ content: { raw: body.slice(0, 32000) } }` (32000 is a conservative cap; Bitbucket's comment limit is ≈32767), `Content-Type: application/json` + the auth header.
+- Auth via `bitbucketAuthHeader(this.token, this.username)`. **Note the ctor param is named `username`** (not `email` as in `JiraClient`) — same `Basic base64(credential:token)` pattern, different credential.
 
 ### `parseBitbucketEvent(body, eventKey)` — `apps/server/src/services/WebhookMatcher.ts`
 ```ts
@@ -63,7 +66,7 @@ export function parseBitbucketEvent(body: Record<string, unknown>, eventKey: str
 - `payload = body`.
 
 ### `/webhooks/bitbucket` route — `apps/server/src/api/routes/webhooks.ts`
-- Schema: `querystring: Type.Object({ token: Type.Optional(Type.String()) }, { additionalProperties: true })`, `headers` allowing `x-event-key`, `body: Type.Any()`.
+- Schema: `querystring: Type.Object({ token: Type.Optional(Type.String()) }, { additionalProperties: true })`, `headers: Type.Object({ 'x-event-key': Type.Optional(Type.String()) }, { additionalProperties: true })` (the header MUST be `Optional` + `additionalProperties: true` so a missing/extra header never yields a 400), `body: Type.Any()`.
 - If `config.BITBUCKET_WEBHOOK_SECRET` is set and `req.query.token !== secret` → 401. If unset, `app.log.warn` (same convention as the Jira route's unauthenticated warning).
 - `const eventKey = req.headers['x-event-key'] as string | undefined` (→ `''` if absent).
 - `parseBitbucketEvent(body, eventKey)` → null → 200 `{skipped}`. Then identical `matchAgents` → `fetcher.fetch` → `serializeForRunner` → `RunRepository.create` per matched agent → 200 `{created}`. Mirrors the GitLab route exactly.
@@ -91,11 +94,24 @@ export function parseBitbucketEvent(body: Record<string, unknown>, eventKey: str
 - `serializeForRunner` unchanged (uses `ctx.mr` / `ctx.ticket`).
 
 ### `ResultDispatcher` — `apps/server/src/services/ResultDispatcher.ts`
-- Constructor appends `bitbucketToken?`, `bitbucketUsername?` (after `teamsWebhook`); if `bitbucketToken` → `this.bitbucket = new BitbucketClient(...)`.
-- The `pr_comment` branch routes by **payload shape**:
-  - GitLab-shaped (`payload.object_attributes?.iid`) and `this.gitlab` → `postGitLabComment` (unchanged).
-  - Bitbucket-shaped (`payload.pullrequest`) and `this.bitbucket` → new `postBitbucketComment(result, payload)`: `repo = payload.repository.full_name`, `prId = payload.pullrequest.id`; body `### Agent Hub Review\n\n${result}` → `bitbucket.postPrComment`.
-  - Each wrapped in the existing `.catch` log pattern.
+- Constructor appends `bitbucketToken?`, `bitbucketUsername?` (after `teamsWebhook`); if `bitbucketToken` → `this.bitbucket = new BitbucketClient(bitbucketToken, bitbucketUsername)`.
+- **Restructure the `pr_comment` branch so the two platforms are independent (CRITICAL).** Today the branch is `if (output === 'pr_comment' && this.gitlab) { postGitLabComment(...) }`. If the Bitbucket call were nested under that same `this.gitlab` guard, a Bitbucket comment would be **silently skipped whenever GitLab is unconfigured** (`this.gitlab` undefined). Instead, make it a single `if (output === 'pr_comment')` that delegates to a private router which dispatches by **payload shape**, each guarded only by its own client:
+  ```
+  if (output === 'pr_comment') {
+    await this.postPrComment(run.result, payload).catch(e => console.error('[ResultDispatcher] pr_comment failed:', e));
+  }
+  ```
+  ```
+  private async postPrComment(result, payload) {
+    // GitLab-shaped
+    if (payload?.object_attributes?.iid && this.gitlab) { await this.postGitLabComment(result, payload); return; }
+    // Bitbucket-shaped
+    if (payload?.pullrequest && this.bitbucket) { await this.postBitbucketComment(result, payload); return; }
+  }
+  ```
+  - `postGitLabComment` keeps its current body (just moved behind the shape check).
+  - `postBitbucketComment(result, payload)`: `repo = payload.repository.full_name`, `prId = payload.pullrequest.id`; body `### Agent Hub Review\n\n${result}` → `this.bitbucket.postPrComment(repo, prId, body)`.
+  - The single shape-router guarantees: only the matching client fires; a GitLab payload never hits Bitbucket and vice-versa; and Bitbucket works even when GitLab is unconfigured. The outer `.catch` log pattern is preserved.
 
 ### Wiring
 - `webhooks.ts`: the shared `ContextFetcher` gains `config.BITBUCKET_API_TOKEN, config.BITBUCKET_USERNAME`.
