@@ -18,7 +18,7 @@ const q = (s: string): string => `"${s}"`;
 export function buildToolArgs({ enabled, repoPaths }: ToolArgsOptions): string[] {
   if (!enabled) return [];
   const args: string[] = [
-    '--permission-mode', 'default',
+    '--permission-mode', 'dontAsk',
     '--allowedTools', ...ALLOWED_TOOLS.map(q),
     '--disallowedTools', ...DISALLOWED_TOOLS.map(q),
   ];

@@ -36,4 +36,30 @@ describe('resolveRepoPaths', () => {
   it('returns [] for empty input', () => {
     expect(resolveRepoPaths('/whatever', [])).toEqual([]);
   });
+
+  it('rejects a repo that resolves to the parent dir (path traversal)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rp-'));
+    try {
+      const out = resolveRepoPaths(root, ['gitlab:evil/..']);
+      expect(out).toEqual([]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('rejects an empty-name or dot entry that resolves to reposRoot itself', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rp-'));
+    try {
+      // split('/').pop() of 'gitlab:evil/.' gives '.', join(root,'.') === root
+      const out = resolveRepoPaths(root, ['gitlab:evil/.']);
+      expect(out).toEqual([]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it('still resolves valid repos alongside rejected traversal entries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rp-'));
+    try {
+      mkdirSync(join(root, 'Apps'));
+      const out = resolveRepoPaths(root, ['gitlab:evil/..', 'gitlab:global-e/Apps']);
+      expect(out).toEqual([join(root, 'Apps')]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
 });

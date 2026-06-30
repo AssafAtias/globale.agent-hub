@@ -6,9 +6,9 @@ describe('buildToolArgs', () => {
     expect(buildToolArgs({ enabled: false, repoPaths: ['/a', '/b'] })).toEqual([]);
   });
 
-  it('emits permission-mode default and double-quoted read-only tools', () => {
+  it('emits permission-mode dontAsk and double-quoted read-only tools', () => {
     const args = buildToolArgs({ enabled: true, repoPaths: ['/a'] });
-    expect(args.slice(0, 2)).toEqual(['--permission-mode', 'default']);
+    expect(args.slice(0, 2)).toEqual(['--permission-mode', 'dontAsk']);
     expect(args).toContain('--allowedTools');
     expect(args).toContain('"Read"');
     expect(args).toContain('"Grep"');

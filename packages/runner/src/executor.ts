@@ -80,7 +80,7 @@ export async function executeJob(
   const systemPrompt = parts.join('\n\n---\n\n');
 
   const repoPaths = resolveRepoPaths(localReposRoot, agentRepos);
-  const cwd = repoPaths[0] ?? localReposRoot;
+  const cwd = toolsEnabled ? (repoPaths[0] ?? localReposRoot) : localReposRoot;
   const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths });
 
   const raw = await runClaude(job.agent.model, systemPrompt, contextText, cwd, toolArgs);
