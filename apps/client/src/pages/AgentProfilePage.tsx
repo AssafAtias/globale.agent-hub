@@ -88,6 +88,11 @@ export function AgentProfilePage() {
             >
               <RunStatusBadge status={run.status} />
               <Typography variant="body2">{run.trigger}</Typography>
+              {run.trigger === 'handoff' && (() => {
+                let depth: number | undefined;
+                try { depth = JSON.parse(run.triggerPayload ?? '{}')?.handoff?.depth; } catch { /* ignore */ }
+                return <Typography variant="caption" color="text.secondary">↳ handoff{depth != null ? ` (depth ${depth})` : ''}</Typography>;
+              })()}
               <Typography variant="body2" color="text.secondary">
                 {new Date(run.createdAt).toLocaleString()}
               </Typography>

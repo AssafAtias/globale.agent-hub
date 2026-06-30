@@ -25,7 +25,7 @@ export const agents = sqliteTable('agents', {
 export const runs = sqliteTable('runs', {
   id: text('id').primaryKey(),
   agentId: text('agent_id').notNull().references(() => agents.id),
-  trigger: text('trigger').notNull(),     // 'webhook' | 'manual'
+  trigger: text('trigger').notNull(),     // 'webhook' | 'manual' | 'schedule' | 'handoff'
   triggerPayload: text('trigger_payload').notNull(), // JSON
   context: text('context').notNull().default('{}'),  // JSON: pre-fetched context
   status: text('status').notNull().default('pending'),

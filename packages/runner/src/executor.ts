@@ -65,6 +65,27 @@ export function renderResponse(pending?: string | null): string {
   } catch { return 'Continue.'; }
 }
 
+export interface HandoffPayload { agent: string; message: string; }
+
+export function extractHandoff(text: string): { result: string; handoff: HandoffPayload | null } {
+  const m = text.match(/<handoff>([\s\S]*?)<\/handoff>/);
+  if (!m) return { result: text, handoff: null };
+  let parsed: HandoffPayload;
+  try { parsed = JSON.parse(m[1].trim()); }
+  catch { throw new Error(`Agent emitted a malformed <handoff> block: ${m[1].slice(0, 200)}`); }
+  if (!parsed.agent || !parsed.message) {
+    throw new Error(`Handoff block missing agent/message: ${m[1].slice(0, 200)}`);
+  }
+  const result = (text.slice(0, m.index) + text.slice(m.index! + m[0].length)).trim();
+  return { result, handoff: parsed };
+}
+
+const HANDOFF_PROTOCOL =
+  'To delegate to another agent, end your turn with exactly one ' +
+  '<handoff>{"agent":"<slug>","message":"..."}</handoff> block. This is OPTIONAL — only do it when your task ' +
+  'tells you to. The other agent receives ONLY your message as its context, so make the message a complete, ' +
+  'self-contained briefing.';
+
 export interface GatePayload {
   id: string; summary?: string; question: string;
   kind: 'approve_reject' | 'input' | 'choice'; options?: string[];
@@ -92,7 +113,7 @@ const GATE_PROTOCOL =
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
   memory: MemoryInput, toolsEnabled: boolean,
-): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string }> {
+): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string; handoff: HandoffPayload | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
   const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
@@ -115,6 +136,7 @@ export async function executeJob(
     parts.push(GATE_PROTOCOL);
     parts.push(`## Workflow\n\n${workflowText}`);
   }
+  parts.push(HANDOFF_PROTOCOL);
   parts.push(job.agent.prompt);
   const systemPrompt = parts.join('\n\n---\n\n');
 
@@ -128,8 +150,9 @@ export async function executeJob(
   const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh });
   const { gate } = extractGate(raw);
   if (gate) return { kind: 'gate' as const, gate, sessionId };
-  const { result, note } = extractMemoryUpdate(raw);
-  return { kind: 'final' as const, result, note, sessionId };
+  const { result: afterHandoff, handoff } = extractHandoff(raw);
+  const { result, note } = extractMemoryUpdate(afterHandoff);
+  return { kind: 'final' as const, result, note, sessionId, handoff };
 }
 
 const CLI_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes

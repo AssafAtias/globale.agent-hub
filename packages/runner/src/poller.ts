@@ -70,7 +70,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
           await postResult(config, job.run.id, { gate: outcome.gate, sessionId: outcome.sessionId });
           console.log(`[runner] Run ${job.run.id} paused at gate "${outcome.gate.id}"`);
         } else {
-          await postResult(config, job.run.id, { result: outcome.result, sessionId: outcome.sessionId });
+          await postResult(config, job.run.id, { result: outcome.result, sessionId: outcome.sessionId, handoff: outcome.handoff });
           if (outcome.note) await postMemory(config, job.run.agentId, { runId: job.run.id, note: outcome.note });
           console.log(`[runner] Run ${job.run.id} completed`);
         }
@@ -89,7 +89,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
 async function postResult(
   config: RunnerConfig,
   runId: string,
-  body: { result?: string; error?: string; gate?: unknown; sessionId?: string },
+  body: { result?: string; error?: string; gate?: unknown; sessionId?: string; handoff?: unknown },
 ) {
   const res = await fetch(`${config.orchestratorUrl}/api/runs/${runId}/result`, {
     method: 'POST',

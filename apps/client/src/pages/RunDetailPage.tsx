@@ -29,6 +29,11 @@ export function RunDetailPage() {
       <Typography variant="body2" color="text.secondary" gutterBottom>
         Agent: {run.agentId} · Trigger: {run.trigger} · {new Date(run.createdAt).toLocaleString()}
       </Typography>
+      {run.trigger === 'handoff' && (() => {
+        let depth: number | undefined;
+        try { depth = JSON.parse(run.triggerPayload ?? '{}')?.handoff?.depth; } catch { /* ignore */ }
+        return <Typography variant="caption" color="text.secondary">↳ handoff{depth != null ? ` (depth ${depth})` : ''}</Typography>;
+      })()}
       {run.status === 'running' && <CircularProgress size={20} sx={{ mt: 2 }} />}
       {run.status === 'waiting_approval' && run.pendingGate && (() => {
         let gate: { kind: string; summary?: string; question: string } | null = null;
