@@ -53,6 +53,30 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
   return { result, note: note.length > 0 ? note : null };
 }
 
+export interface GatePayload {
+  id: string; summary: string; question: string;
+  kind: 'approve_reject' | 'input' | 'choice'; options?: string[];
+}
+
+export function extractGate(text: string): { gate: GatePayload | null } {
+  const m = text.match(/<gate>([\s\S]*?)<\/gate>/);
+  if (!m) return { gate: null };
+  let parsed: GatePayload;
+  try { parsed = JSON.parse(m[1].trim()); }
+  catch { throw new Error(`Agent emitted a malformed <gate> block: ${m[1].slice(0, 200)}`); }
+  if (!parsed.id || !parsed.question || !parsed.kind) {
+    throw new Error(`Gate block missing required fields: ${m[1].slice(0, 200)}`);
+  }
+  return { gate: parsed };
+}
+
+const GATE_PROTOCOL =
+  'Each turn is non-interactive. When the workflow says STOP at a ⛔ gate, end your turn ' +
+  'with exactly one <gate>{...}</gate> JSON block and STOP — do not proceed past it. ' +
+  'You will be re-invoked with the user\'s response and continue. JSON shape: ' +
+  '{ "id": string, "summary": string, "question": string, "kind": "approve_reject"|"input"|"choice", "options"?: string[] }. ' +
+  'When fully done, end normally with NO gate block.';
+
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
   memory: MemoryInput, toolsEnabled: boolean,
