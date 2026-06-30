@@ -5,6 +5,8 @@ const COLOR: Record<string, 'default' | 'warning' | 'info' | 'success' | 'error'
   running: 'info',
   done: 'success',
   failed: 'error',
+  waiting_approval: 'warning',
+  rejected: 'error',
 };
 
 export function RunStatusBadge({ status }: { status: string }) {

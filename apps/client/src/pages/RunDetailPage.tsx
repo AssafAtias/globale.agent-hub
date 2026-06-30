@@ -31,7 +31,9 @@ export function RunDetailPage() {
       </Typography>
       {run.status === 'running' && <CircularProgress size={20} sx={{ mt: 2 }} />}
       {run.status === 'waiting_approval' && run.pendingGate && (() => {
-        const gate = JSON.parse(run.pendingGate);
+        let gate: { kind: string; summary?: string; question: string } | null = null;
+        try { gate = JSON.parse(run.pendingGate); } catch { gate = null; }
+        if (!gate) return <Typography color="error" sx={{ mt: 2 }}>Malformed gate data</Typography>;
         return (
           <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'warning.main', borderRadius: 1 }}>
             <Typography variant="subtitle2" gutterBottom>{gate.summary}</Typography>
@@ -49,7 +51,7 @@ export function RunDetailPage() {
             <Button
               variant="contained"
               disabled={respond.isPending}
-              onClick={() => respond.mutate({ id: run.id, decision: gate.kind === 'approve_reject' ? 'approve' : 'answer', message: answer })}
+              onClick={() => respond.mutate({ id: run.id, decision: gate!.kind === 'approve_reject' ? 'approve' : 'answer', message: answer })}
             >
               {gate.kind === 'approve_reject' ? 'Approve' : 'Send'}
             </Button>
