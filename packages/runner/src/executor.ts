@@ -48,6 +48,53 @@ const MEMORY_INSTRUCTION =
   '<memory-update>...</memory-update> block containing a concise note (what you did / what you learned). ' +
   'Write nothing there if there is nothing worth remembering.';
 
+export interface ProgressEvent { kind: string; label: string; detail?: string }
+export type OnProgress = (e: ProgressEvent) => void;
+
+/** Reconstruct the final result string from a stream-json transcript — must match json mode. */
+export function extractStreamResult(lines: string[]): string {
+  let resultEvt: { subtype?: string; is_error?: boolean; result?: string } | null = null;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    let e: any;
+    try { e = JSON.parse(t); } catch { continue; }
+    if (e && e.type === 'result') resultEvt = e; // last result event wins
+  }
+  if (!resultEvt) throw new Error('claude stream-json produced no result event');
+  if (resultEvt.is_error || (resultEvt.subtype && resultEvt.subtype !== 'success')) {
+    throw new Error(`claude CLI error (${resultEvt.subtype ?? 'unknown'}): ${(resultEvt.result ?? 'no detail').toString().slice(0, 500)}`);
+  }
+  return (resultEvt.result ?? '').trim() || '(no output)';
+}
+
+function summarizeToolInput(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const o = input as Record<string, unknown>;
+  const v = o.file_path ?? o.command ?? o.pattern ?? o.path ?? o.url;
+  if (typeof v === 'string') return v.slice(0, 120);
+  try { return JSON.stringify(o).slice(0, 120); } catch { return undefined; }
+}
+
+/** Map one parsed stream-json event to zero+ readable progress events. */
+export function summarizeStreamEvent(evt: unknown): ProgressEvent[] {
+  if (!evt || typeof evt !== 'object') return [];
+  const o = evt as any;
+  if (o.type === 'system' && o.subtype === 'init') return [{ kind: 'system', label: 'session started' }];
+  if (o.type === 'assistant' && Array.isArray(o.message?.content)) {
+    const out: ProgressEvent[] = [];
+    for (const b of o.message.content) {
+      if (b?.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
+        out.push({ kind: 'assistant', label: 'responding', detail: b.text.trim().slice(0, 120) });
+      } else if (b?.type === 'tool_use') {
+        out.push({ kind: 'tool', label: typeof b.name === 'string' ? b.name : 'tool', detail: summarizeToolInput(b.input) });
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
 export function extractMemoryUpdate(text: string): { result: string; note: string | null } {
   const m = text.match(/<memory-update>([\s\S]*?)<\/memory-update>/);
   if (!m) return { result: text, note: null };
