@@ -1,5 +1,6 @@
 import { GitLabClient, type MrContext, type MrPipeline, type MrDiscussionNote } from './GitLabClient.js';
 import { JiraClient, type JiraTicketContext } from './JiraClient.js';
+import { BitbucketClient } from './BitbucketClient.js';
 import type { ParsedWebhookEvent } from './WebhookMatcher.js';
 import { extractIssueKey } from './issueKey.js';
 
@@ -14,10 +15,12 @@ export interface FetchedContext {
 export class ContextFetcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
+  private bitbucket?: BitbucketClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, bitbucketToken?: string, bitbucketUsername?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
     if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
+    if (bitbucketToken) this.bitbucket = new BitbucketClient(bitbucketToken, bitbucketUsername);
   }
 
   async fetch(event: ParsedWebhookEvent): Promise<FetchedContext> {

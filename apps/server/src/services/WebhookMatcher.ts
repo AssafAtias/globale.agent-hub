@@ -51,6 +51,24 @@ export function parseJiraEvent(body: Record<string, unknown>): ParsedWebhookEven
   return null;
 }
 
+export function parseBitbucketEvent(body: Record<string, unknown>, eventKey: string): ParsedWebhookEvent | null {
+  const eventMap: Record<string, string> = {
+    'pullrequest:created': 'mr:opened',
+    'pullrequest:updated': 'mr:updated',
+    'pullrequest:fulfilled': 'mr:merged',
+  };
+  const eventType = eventMap[eventKey];
+  if (!eventType) return null;
+
+  const fullName = (body['repository'] as Record<string, unknown>)?.['full_name'] as string;
+  if (!fullName) return null;
+
+  const pr = body['pullrequest'] as Record<string, unknown> | undefined;
+  const sourceRef = ((pr?.['source'] as Record<string, unknown>)?.['branch'] as Record<string, unknown>)?.['name'] as string | undefined;
+
+  return { platform: 'bitbucket', repo: `bitbucket:${fullName}`, eventType, sourceRef, payload: body };
+}
+
 export function matchAgents(event: ParsedWebhookEvent): AgentRow[] {
   const all = AgentRepository.findAll();
   return all.filter(agent => {
