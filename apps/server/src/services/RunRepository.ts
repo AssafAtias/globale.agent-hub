@@ -55,31 +55,42 @@ export const RunRepository = {
     const claim = sqlite.transaction(() => {
       const pending = db.select().from(runs).where(eq(runs.status, 'pending')).get();
       if (!pending) return null;
-
-      db.update(runs).set({
-        status: 'running',
-        runnerId,
-        startedAt,
-      }).where(and(eq(runs.id, pending.id), eq(runs.status, 'pending'))).run();
-
-      return db.select().from(runs).where(eq(runs.id, pending.id)).get() ?? null;
+      const capturedResponse = pending.pendingResponse;
+      db.update(runs).set({ status: 'running', runnerId, startedAt, pendingResponse: null })
+        .where(and(eq(runs.id, pending.id), eq(runs.status, 'pending'))).run();
+      const claimed = db.select().from(runs).where(eq(runs.id, pending.id)).get();
+      return claimed ? { ...claimed, pendingResponse: capturedResponse } : null;
     });
 
     return claim() as RunRow | null;
   },
-  complete(id: string, result: string) {
+  complete(id: string, result: string, sessionId?: string) {
     getDb().update(runs).set({
       status: 'done',
       result,
       finishedAt: new Date().toISOString(),
+      ...(sessionId ? { sessionId } : {}),
     }).where(eq(runs.id, id)).run();
   },
-  fail(id: string, error: string) {
+  fail(id: string, error: string, sessionId?: string) {
     getDb().update(runs).set({
       status: 'failed',
       error,
       finishedAt: new Date().toISOString(),
+      ...(sessionId ? { sessionId } : {}),
     }).where(eq(runs.id, id)).run();
+  },
+  pauseForGate(id: string, sessionId: string, gateJson: string) {
+    getDb().update(runs).set({ status: 'waiting_approval', sessionId, pendingGate: gateJson, runnerId: null })
+      .where(eq(runs.id, id)).run();
+  },
+  resumeWithResponse(id: string, responseJson: string) {
+    getDb().update(runs).set({ status: 'pending', pendingResponse: responseJson, pendingGate: null })
+      .where(eq(runs.id, id)).run();
+  },
+  reject(id: string, message: string) {
+    getDb().update(runs).set({ status: 'rejected', error: message, pendingGate: null, finishedAt: new Date().toISOString() })
+      .where(eq(runs.id, id)).run();
   },
   setArchived(id: string, archived: boolean): RunRow | null {
     const db = getDb();

@@ -48,3 +48,41 @@ describe('RunRepository.lastScheduledRun', () => {
     expect(RunRepository.lastScheduledRun('nobody')).toBeNull();
   });
 });
+
+describe('gate lifecycle', () => {
+  it('pauseForGate parks in waiting_approval with sessionId + gate', () => {
+    const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    RunRepository.pauseForGate(r.id, 'sess-1', '{"id":"g","question":"q","kind":"approve_reject","summary":"s"}');
+    const row = RunRepository.findById(r.id)!;
+    expect(row.status).toBe('waiting_approval');
+    expect(row.sessionId).toBe('sess-1');
+    expect(row.pendingGate).toContain('"id":"g"');
+  });
+  it('resumeWithResponse re-queues with pendingResponse and clears the gate', () => {
+    const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    RunRepository.pauseForGate(r.id, 'sess-1', '{"id":"g"}');
+    RunRepository.resumeWithResponse(r.id, '{"decision":"approve"}');
+    const row = RunRepository.findById(r.id)!;
+    expect(row.status).toBe('pending');
+    expect(row.pendingResponse).toContain('approve');
+    expect(row.pendingGate).toBeNull();
+  });
+  it('claimNext returns the captured pendingResponse then nulls the column', () => {
+    const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    RunRepository.pauseForGate(r.id, 'sess-1', '{"id":"g"}');
+    RunRepository.resumeWithResponse(r.id, '{"decision":"approve"}');
+    const claimed = RunRepository.claimNext('runner-1')!;
+    expect(claimed.pendingResponse).toContain('approve');
+    expect(RunRepository.findById(r.id)!.pendingResponse).toBeNull();
+  });
+  it('reject marks the run rejected', () => {
+    const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    RunRepository.reject(r.id, 'not needed');
+    expect(RunRepository.findById(r.id)!.status).toBe('rejected');
+  });
+  it('complete persists an optional sessionId', () => {
+    const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    RunRepository.complete(r.id, 'done', 'sess-2');
+    expect(RunRepository.findById(r.id)!.sessionId).toBe('sess-2');
+  });
+});
