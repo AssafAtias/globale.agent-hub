@@ -33,7 +33,9 @@ Let an enabled agent fire on a cron schedule. A server-side scheduler creates a 
 ## Components
 
 ### Dependency
-Add `croner` (`^9.0.0`) to `apps/server/package.json` dependencies. Import as `import { Cron } from 'croner';`. Use **`Cron#previousRuns(n, referenceDate)`** (verified via docs: returns an array of the previous `n` scheduled `Date`s relative to `referenceDate`, most-recent-first). NOTE: the singular `previousRun()` is execution-tracking (no date arg, returns when *this job object* last fired) — do NOT use it. Construct the `Cron` with **no callback** (`new Cron(expr)` only) so it does not auto-schedule a live job; it is used purely for slot calculation.
+Add `croner` (`^9.0.0`) to `apps/server/package.json` dependencies. Import as `import { Cron } from 'croner';`. Construct with **no callback** (`new Cron(expr)` only) so it does not auto-schedule a live job — used purely for calculation.
+
+**IMPLEMENTATION REALITY (croner 9.1.0):** the installed version has **no `previousRuns`** (the docs were ahead of the shipped version), and `previousRun(date)` returns `undefined`. So `isDue` is built on **`nextRun(date)`** instead, which natively handles non-uniform schedules (e.g. weekday-only). Deriving a "previous slot" by assuming a constant interval is WRONG for non-uniform crons (a weekday-2am schedule would mis-fire on weekends) — do NOT do that.
 
 ### Pure helpers — `apps/server/src/services/schedule.ts`
 ```ts
@@ -41,7 +43,7 @@ export function isDue(cronExpr: string, lastScheduledAtIso: string | null, now: 
 export function parseCronFromTriggerRules(triggerRulesJson: string): string | null
 export function buildScheduledContext(reposJson: string): string
 ```
-- **`isDue`**: `const prev = new Cron(cronExpr).previousRuns(1, now)[0] ?? null`. Return `false` if `!prev`. Return `true` if `lastScheduledAtIso` is null (never fired). Else return `new Date(lastScheduledAtIso) < prev` (last fire predates the current slot). Wrap the whole thing in try/catch → invalid expression returns `false`.
+- **`isDue`** (nextRun-based): `const cron = new Cron(cronExpr)`. If `lastScheduledAtIso === null` → return `cron.nextRun(now) !== null` (never fired → fire once on the next tick for any valid recurring schedule). Else `const next = cron.nextRun(new Date(lastScheduledAtIso))`; return `next !== null && next.getTime() <= now.getTime()` (a slot fell in `(lastScheduled, now]`). Whole body in try/catch → invalid expression returns `false`.
 - **`parseCronFromTriggerRules`**: JSON-parse the agent's `triggerRules`; return a non-empty trimmed `cron` string or `null` (safe-parse → null on garbage).
 - **`buildScheduledContext`**: parse `reposJson` (string[]); return `JSON.stringify(ctx)` where `ctx` always has `'Scheduled run': 'This is a scheduled (cron) run with no triggering event. Use your available tools to inspect the repo(s) and carry out your task.'`, and — only when repos is a non-empty array — `'Repos': repos.join(', ')`. (Shape matches the runner's `formatContext`: a flat object of key→string.)
 

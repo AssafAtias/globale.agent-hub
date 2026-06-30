@@ -30,3 +30,21 @@ describe('RunRepository.createCompleted', () => {
     expect(RunRepository.claimNext('runner-1')).toBeNull();
   });
 });
+
+describe('RunRepository.lastScheduledRun', () => {
+  it('returns the most recent schedule-trigger run for the agent', async () => {
+    RunRepository.create({ agentId: 'a', trigger: 'schedule', triggerPayload: '{}', context: '{}' });
+    await new Promise(resolve => setTimeout(resolve, 1));
+    const second = RunRepository.create({ agentId: 'a', trigger: 'schedule', triggerPayload: '{}', context: '{}' });
+    const last = RunRepository.lastScheduledRun('a');
+    expect(last?.id).toBe(second.id);
+  });
+  it('ignores non-schedule triggers', () => {
+    RunRepository.create({ agentId: 'a', trigger: 'webhook', triggerPayload: '{}', context: '{}' });
+    RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
+    expect(RunRepository.lastScheduledRun('a')).toBeNull();
+  });
+  it('returns null when the agent has no schedule runs', () => {
+    expect(RunRepository.lastScheduledRun('nobody')).toBeNull();
+  });
+});

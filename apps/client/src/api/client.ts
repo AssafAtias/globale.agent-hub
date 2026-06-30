@@ -23,7 +23,7 @@ export interface Agent {
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
-  repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string };
+  repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string; cron?: string };
   outputs: string[]; enabled?: boolean;
   avatarKey?: string; title?: string; bio?: string; focus?: string; skills?: string[];
 }

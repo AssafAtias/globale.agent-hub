@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fastify/type-provider-typebox": "^5.2.0",
+    "croner": "^9.0.0",
     "@sinclair/typebox": "^0.34.0",
     "better-sqlite3": "^11.0.0",
     "botbuilder": "^4.23.0",

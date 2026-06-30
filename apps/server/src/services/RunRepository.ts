@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { runs } from '../db/schema.js';
@@ -85,5 +85,12 @@ export const RunRepository = {
     const db = getDb();
     db.update(runs).set({ archived }).where(eq(runs.id, id)).run();
     return db.select().from(runs).where(eq(runs.id, id)).get() ?? null;
+  },
+  lastScheduledRun(agentId: string) {
+    return getDb().select().from(runs)
+      .where(and(eq(runs.agentId, agentId), eq(runs.trigger, 'schedule')))
+      .orderBy(desc(runs.createdAt))
+      .limit(1)
+      .get() ?? null;
   },
 };
