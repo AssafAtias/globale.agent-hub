@@ -6,7 +6,7 @@ import Typography from '@mui/material/Typography';
 
 const EVENT_OPTIONS = ['mr:opened', 'mr:updated', 'mr:merged', 'jira:status:in-progress', 'pipeline:failed'];
 
-interface TriggerRules { events: string[]; branchFilter?: string; jiraLabel?: string; }
+interface TriggerRules { events: string[]; branchFilter?: string; jiraLabel?: string; cron?: string; }
 interface Props { value: TriggerRules; onChange: (v: TriggerRules) => void; }
 
 export function TriggerRulesForm({ value, onChange }: Props) {
@@ -34,6 +34,14 @@ export function TriggerRulesForm({ value, onChange }: Props) {
         onChange={e => onChange({ ...value, jiraLabel: e.target.value || undefined })}
         placeholder="checkout-team"
         size="small"
+      />
+      <TextField
+        label="Schedule (cron, optional)"
+        value={value.cron ?? ''}
+        onChange={e => onChange({ ...value, cron: e.target.value || undefined })}
+        placeholder="0 2 * * 1-5"
+        size="small"
+        helperText="Runs the agent on this cron schedule (host timezone). Leave empty for no schedule."
       />
     </Box>
   );
