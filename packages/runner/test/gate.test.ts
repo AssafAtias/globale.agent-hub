@@ -16,4 +16,9 @@ describe('extractGate', () => {
   it('throws when required fields missing', () => {
     expect(() => extractGate('<gate>{"summary":"s"}</gate>')).toThrow();
   });
+  it('parses a gate without a summary (summary is optional)', () => {
+    const { gate } = extractGate('<gate>{"id":"g","question":"q","kind":"input"}</gate>');
+    expect(gate?.id).toBe('g');
+    expect(gate?.summary).toBeUndefined();
+  });
 });

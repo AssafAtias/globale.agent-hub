@@ -54,7 +54,7 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
 }
 
 export interface GatePayload {
-  id: string; summary: string; question: string;
+  id: string; summary?: string; question: string;
   kind: 'approve_reject' | 'input' | 'choice'; options?: string[];
 }
 
