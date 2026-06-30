@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Repo:** `globale.agent-hub`
-**Status:** Approved (pending spec review)
+**Status:** Approved (spec review passed)
 **Roadmap:** Phase 4A. Supersedes the Phase-2 half of `docs/superpowers/plans/2026-06-28-interactive-gated-workflow.md`, which drifted from the executor after Phase 1A added `toolArgs`/`toolsEnabled`.
 
 ## Problem
@@ -48,11 +48,11 @@ Implement the interactive gate mechanism on the **current** codebase: an agent w
   return { kind: 'final', result, note, sessionId };
   ```
   (`cwd` and `toolArgs` are computed exactly as today — `cwd = toolsEnabled ? (repoPaths[0] ?? localReposRoot) : localReposRoot`, `toolArgs = buildToolArgs({enabled: toolsEnabled, repoPaths})`.)
-- **`renderResponse(pending?: string | null): string`** — `'Continue.'` when absent; parse `{decision, message?}`: `approve` → "The user approved. Continue with the next step of the workflow."; else → "The user responded:\n<message>\n\nContinue with the workflow." (try/catch → 'Continue.').
+- **`renderResponse(pending?: string | null): string`** — `'Continue.'` when absent; parse `{decision, message?}`: `approve` → "The user approved. Continue with the next step of the workflow."; else (i.e. `answer`) → ``The user responded:\n${r.message ?? ''}\n\nContinue with the workflow.`` — **use `r.message ?? ''`** so an `answer` with no message never renders the literal string "undefined". (try/catch → 'Continue.'.) Note: `reject` never reaches here — `/respond` handles reject by calling `RunRepository.reject` directly, never `resumeWithResponse`, so `pendingResponse` only ever holds `approve`/`answer`.
 - **`runClaude` signature gains session opts AFTER `toolArgs`** (compose with 1A):
   `runClaude(model, systemPrompt, userMessage, cwd, toolArgs: string[], opts: { sessionId: string; resume: boolean })`.
   - Session args: `opts.resume ? ['--resume', opts.sessionId] : ['--session-id', opts.sessionId]`.
-  - System prompt: only on fresh — `opts.resume ? [] : ['--append-system-prompt-file', '"<sysFile>"']`. **Guard the sysFile write + unlink behind `!opts.resume`** (a resumed session already carries the system prompt).
+  - System prompt: only on fresh — `opts.resume ? [] : ['--append-system-prompt-file', '"<sysFile>"']`. **Structural guard:** keep the `const sysFile = join(tmpdir(), …)` path declaration unconditional (so the `finally` closure can reference it), but wrap the `writeFileSync(sysFile, …)` in `if (!opts.resume) { … }`. The existing `finally { try { unlinkSync(sysFile) } catch {} }` is already exception-guarded, so on resume (no file written) the unlink simply no-ops — leave it as-is. The full system-prompt assembly (all the `parts.push(...)` building `systemPrompt`) STILL runs on resume; only the `--append-system-prompt-file` CLI flag and the file write are skipped (the resumed session already carries the prompt in its transcript).
   - **`toolArgs` are passed on BOTH fresh and resume** (`--allowedTools`/`--permission-mode dontAsk`/`--disallowedTools`/`--add-dir` are per-invocation, not persisted in the session) — append `...toolArgs` to the spawn args in both cases.
   - Spawn args fresh: `['-p','--model',model,'--output-format','json','--session-id',id,'--append-system-prompt-file','"<sys>"', ...toolArgs]`; resume: `['-p','--model',model,'--output-format','json','--resume',id, ...toolArgs]`. Everything else (env strip, `shell:true`, JSON parse, timeout) unchanged.
 - **`Job.run`** gains `sessionId?: string`, `pendingResponse?: string | null`. `isJob` still accepts jobs lacking those fields (don't tighten the guard).
@@ -65,10 +65,20 @@ Implement the interactive gate mechanism on the **current** codebase: an agent w
 - **`resumeWithResponse(id, responseJson)`** → set `status:'pending'`, `pendingResponse: responseJson`, `pendingGate: null`.
 - **`reject(id, message)`** → set `status:'rejected'`, `error: message`, `pendingGate: null`, `finishedAt: now`.
 - **`complete`/`fail` gain an optional `sessionId?` 3rd arg** → spread `...(sessionId ? { sessionId } : {})` into the update set. (Existing call sites unaffected — arg is optional.)
-- **`claimNext`** — inside the existing transaction, after re-selecting the claimed row, if `claimed.pendingResponse` is set, null the column in the DB (`db.update(runs).set({ pendingResponse: null })…`) but **return the row with the captured value intact** (the runner needs `pendingResponse` for `renderResponse`; the DB column is cleared so a re-claim doesn't replay it).
+- **`claimNext`** — capture-then-null, done CAREFULLY to avoid silently dropping the response. Inside the existing transaction:
+  ```ts
+  const pending = db.select().from(runs).where(eq(runs.status,'pending')).get();
+  if (!pending) return null;
+  const capturedResponse = pending.pendingResponse;            // capture BEFORE update
+  db.update(runs).set({ status:'running', runnerId, startedAt, pendingResponse: null })  // null it in DB
+    .where(and(eq(runs.id, pending.id), eq(runs.status,'pending'))).run();
+  const claimed = db.select().from(runs).where(eq(runs.id, pending.id)).get();
+  return claimed ? { ...claimed, pendingResponse: capturedResponse } : null;  // re-inject captured value
+  ```
+  **The re-injection is mandatory:** the re-selected row has `pendingResponse: null` (we just nulled it), so the runner would otherwise receive `null`, `renderResponse(null)` would return `'Continue.'`, and the user's approval/answer would be silently lost. The DB column stays nulled so a re-claim never replays the response; the RETURNED row carries the captured value for the runner.
 
 ### Server — `packages/server/.../api/routes/runs.ts`
-- **`/result` body schema** gains `gate: Type.Optional(Type.Any())` and `sessionId: Type.Optional(Type.String())`. **Before** the existing error/result branches: `if (req.body.gate) { RunRepository.pauseForGate(req.params.id, req.body.sessionId ?? '', JSON.stringify(req.body.gate)); return reply.status(200).send({ ok: true }); }`. The error branch passes `req.body.sessionId` as the 3rd arg to `fail`; the success branch passes it to `complete`. **ResultDispatcher fanout + Teams notify stay only on the `complete` (non-gate, non-error) path** — a gate is not a completion.
+- **`/result` body schema** gains `gate: Type.Optional(Type.Any())` and `sessionId: Type.Optional(Type.String())`. **Before** the existing error/result branches: `if (req.body.gate) { RunRepository.pauseForGate(req.params.id, req.body.sessionId ?? '', JSON.stringify(req.body.gate)); return reply.status(200).send({ ok: true }); }`. The error branch passes `req.body.sessionId` as the 3rd arg to `fail`; the success branch passes it to `complete`. **ResultDispatcher fanout + Teams notify stay only on the `complete` (non-gate, non-error) path** — a gate is not a completion. (A gate-turned-error — malformed `<gate>` — posts `{error}` with no `sessionId` from the poller, so `fail` won't persist a sessionId; acceptable, the run is failed and its session abandoned.)
 - **New `POST /api/runs/:id/respond`**: body `{ decision: 'approve'|'reject'|'answer', message?: string }`. 404 if run missing; **409 if `run.status !== 'waiting_approval'`**; `reject` decision → `RunRepository.reject(id, message ?? 'Rejected by user')`; else → `RunRepository.resumeWithResponse(id, JSON.stringify({ decision, message }))`. Returns `{ ok: true }`.
 - The `/next` job already returns the full claimed row (now carrying `sessionId` + captured `pendingResponse`) — no change.
 
@@ -110,3 +120,5 @@ Malformed `<gate>` JSON → `extractGate` throws → poller's existing per-run t
 ## Deployment note
 
 Server + runner run from `dist/` — rebuild both + restart after merge. No DB migration (columns exist). No new env, no new deps. The gated agent must have a `workflow` set (e.g. `jira-ticket-to-mr`) and be `ticket-to-code`; it runs read-only, so it proposes rather than opens MRs.
+
+**Runner-host session persistence (operational constraint):** gate resume uses `claude --resume <sessionId>`, which reads the session transcript from the runner host's `~/.claude` state. The same runner host that started a run must resume it — a single local runner (the current setup) satisfies this. If runners are ever scaled out / replaced, a parked `waiting_approval` run can only be resumed on its original host; otherwise `--resume` errors and the run fails. Note this in any future multi-runner runbook.
