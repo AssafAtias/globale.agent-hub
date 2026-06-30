@@ -2,6 +2,7 @@ import { writeFileSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import { LocalEnricher } from './context/LocalEnricher.js';
 import { SkillLoader } from './context/SkillLoader.js';
 import { WorkflowLoader } from './context/WorkflowLoader.js';
@@ -13,6 +14,8 @@ export interface Job {
     id: string;
     agentId: string;
     context: string;
+    sessionId?: string;
+    pendingResponse?: string | null;
   };
   agent: {
     name: string;
@@ -53,6 +56,15 @@ export function extractMemoryUpdate(text: string): { result: string; note: strin
   return { result, note: note.length > 0 ? note : null };
 }
 
+export function renderResponse(pending?: string | null): string {
+  if (!pending) return 'Continue.';
+  try {
+    const r = JSON.parse(pending) as { decision: string; message?: string };
+    if (r.decision === 'approve') return 'The user approved. Continue with the next step of the workflow.';
+    return `The user responded:\n${r.message ?? ''}\n\nContinue with the workflow.`;
+  } catch { return 'Continue.'; }
+}
+
 export interface GatePayload {
   id: string; summary?: string; question: string;
   kind: 'approve_reject' | 'input' | 'choice'; options?: string[];
@@ -80,7 +92,7 @@ const GATE_PROTOCOL =
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
   memory: MemoryInput, toolsEnabled: boolean,
-): Promise<{ result: string; note: string | null }> {
+): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
   const enrichedContextStr = enricher.enrich(job.run.context, agentRepos);
@@ -99,7 +111,10 @@ export async function executeJob(
     parts.push(MEMORY_INSTRUCTION);
   }
   const workflowText = new WorkflowLoader(workflowsDir).load(job.agent.workflow);
-  if (workflowText) parts.push(`## Workflow\n\n${workflowText}`);
+  if (workflowText) {
+    parts.push(GATE_PROTOCOL);
+    parts.push(`## Workflow\n\n${workflowText}`);
+  }
   parts.push(job.agent.prompt);
   const systemPrompt = parts.join('\n\n---\n\n');
 
@@ -107,8 +122,14 @@ export async function executeJob(
   const cwd = toolsEnabled ? (repoPaths[0] ?? localReposRoot) : localReposRoot;
   const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths });
 
-  const raw = await runClaude(job.agent.model, systemPrompt, contextText, cwd, toolArgs);
-  return extractMemoryUpdate(raw);
+  const fresh = !job.run.sessionId;
+  const sessionId = job.run.sessionId ?? randomUUID();
+  const userMessage = fresh ? contextText : renderResponse(job.run.pendingResponse);
+  const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh });
+  const { gate } = extractGate(raw);
+  if (gate) return { kind: 'gate' as const, gate, sessionId };
+  const { result, note } = extractMemoryUpdate(raw);
+  return { kind: 'final' as const, result, note, sessionId };
 }
 
 const CLI_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -131,19 +152,23 @@ interface CliResult {
 // the subscription login rather than mistaking the token for an API key.
 async function runClaude(
   model: string, systemPrompt: string, userMessage: string, cwd: string, toolArgs: string[],
+  opts: { sessionId: string; resume: boolean },
 ): Promise<string> {
   const sysFile = join(tmpdir(), `agent-hub-sys-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`);
-  writeFileSync(sysFile, systemPrompt, 'utf8');
+  if (!opts.resume) { writeFileSync(sysFile, systemPrompt, 'utf8'); }
 
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
 
+  const sessionArgs = opts.resume ? ['--resume', opts.sessionId] : ['--session-id', opts.sessionId];
+  const promptArgs = opts.resume ? [] : ['--append-system-prompt-file', `"${sysFile}"`];
+
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         'claude',
-        ['-p', '--model', model, '--output-format', 'json', '--append-system-prompt-file', `"${sysFile}"`, ...toolArgs],
+        ['-p', '--model', model, '--output-format', 'json', ...sessionArgs, ...promptArgs, ...toolArgs],
         { cwd, env, shell: true },
       );
       let out = '';
