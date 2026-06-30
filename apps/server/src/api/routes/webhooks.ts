@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
-import { parseGitLabEvent, parseJiraEvent, matchAgents } from '../../services/WebhookMatcher.js';
+import { parseGitLabEvent, parseJiraEvent, parseBitbucketEvent, matchAgents } from '../../services/WebhookMatcher.js';
 import { RunRepository } from '../../services/RunRepository.js';
 import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
@@ -10,12 +10,17 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
     if (!config.JIRA_WEBHOOK_SECRET) {
       app.log.warn('[webhooks] JIRA_WEBHOOK_SECRET is not set — /webhooks/jira is unauthenticated');
     }
+    if (!config.BITBUCKET_WEBHOOK_SECRET) {
+      app.log.warn('[webhooks] BITBUCKET_WEBHOOK_SECRET is not set — /webhooks/bitbucket is unauthenticated');
+    }
 
     const fetcher = new ContextFetcher(
       config.GITLAB_API_TOKEN,
       config.JIRA_API_TOKEN,
       config.JIRA_BASE_URL,
       config.JIRA_EMAIL,
+      config.BITBUCKET_API_TOKEN,
+      config.BITBUCKET_USERNAME,
     );
 
     app.post('/webhooks/gitlab', {
@@ -79,6 +84,40 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
           context: contextStr,
         })
       );
+      return reply.status(200).send({ created: createdRuns.length });
+    });
+
+    app.post('/webhooks/bitbucket', {
+      schema: {
+        querystring: Type.Object({ token: Type.Optional(Type.String()) }, { additionalProperties: true }),
+        headers: Type.Object({ 'x-event-key': Type.Optional(Type.String()) }, { additionalProperties: true }),
+        body: Type.Any(),
+      },
+    }, async (req, reply) => {
+      const secret = config.BITBUCKET_WEBHOOK_SECRET;
+      if (secret && (req.query as Record<string, unknown>)['token'] !== secret) {
+        return reply.status(401).send({ error: 'Invalid webhook token' });
+      }
+
+      const eventKey = (req.headers['x-event-key'] as string | undefined) ?? '';
+      const event = parseBitbucketEvent(req.body as Record<string, unknown>, eventKey);
+      if (!event) return reply.status(200).send({ skipped: true });
+
+      const matched = matchAgents(event);
+      if (matched.length === 0) return reply.status(200).send({ skipped: true, reason: 'no agents match' });
+
+      const context = await fetcher.fetch(event);
+      const contextStr = fetcher.serializeForRunner(context);
+
+      const createdRuns = matched.map(agent =>
+        RunRepository.create({
+          agentId: agent.id,
+          trigger: 'webhook',
+          triggerPayload: JSON.stringify(req.body),
+          context: contextStr,
+        })
+      );
+      app.log.info({ runIds: createdRuns.map(r => r.id) }, 'Created runs from Bitbucket webhook');
       return reply.status(200).send({ created: createdRuns.length });
     });
   };

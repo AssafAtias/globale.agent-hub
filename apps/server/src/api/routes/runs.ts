@@ -78,7 +78,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
         if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL || !config.JIRA_EMAIL) {
           return reply.status(400).send({ error: 'Jira is not configured; set JIRA_API_TOKEN, JIRA_BASE_URL and JIRA_EMAIL' });
         }
-        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL);
+        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL, config.BITBUCKET_API_TOKEN, config.BITBUCKET_USERNAME);
         const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
         if (!ctx) {
           return reply.status(201).send(
@@ -146,6 +146,8 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
             config.JIRA_EMAIL,
             teamsNotifier,
             teamsWebhook,
+            config.BITBUCKET_API_TOKEN,
+            config.BITBUCKET_USERNAME,
           );
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')

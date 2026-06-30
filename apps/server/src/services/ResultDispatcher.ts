@@ -1,5 +1,6 @@
 import { GitLabClient } from './GitLabClient.js';
 import { JiraClient } from './JiraClient.js';
+import { BitbucketClient } from './BitbucketClient.js';
 import { formatTeamsResult } from './teams/TeamsNotifier.js';
 import type { AgentRow } from './AgentRepository.js';
 import type { RunRow } from './RunRepository.js';
@@ -12,12 +13,14 @@ export class ResultDispatcher {
   private jira?: JiraClient;
   private teams?: TeamsNotifierLike;
   private teamsWebhook?: TeamsWebhookLike;
+  private bitbucket?: BitbucketClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, teamsNotifier?: TeamsNotifierLike, teamsWebhook?: TeamsWebhookLike) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, teamsNotifier?: TeamsNotifierLike, teamsWebhook?: TeamsWebhookLike, bitbucketToken?: string, bitbucketUsername?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
     if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
     this.teams = teamsNotifier;
     this.teamsWebhook = teamsWebhook;
+    if (bitbucketToken) this.bitbucket = new BitbucketClient(bitbucketToken, bitbucketUsername);
   }
 
   async dispatch(run: RunRow, agent: AgentRow): Promise<void> {
@@ -26,8 +29,8 @@ export class ResultDispatcher {
     const payload = (() => { try { return JSON.parse(run.triggerPayload || '{}'); } catch { return {}; } })();
 
     for (const output of outputs) {
-      if (output === 'pr_comment' && this.gitlab) {
-        await this.postGitLabComment(run.result, payload).catch(e =>
+      if (output === 'pr_comment') {
+        await this.postPrComment(run.result, payload).catch(e =>
           console.error('[ResultDispatcher] pr_comment failed:', e)
         );
       }
@@ -60,12 +63,26 @@ export class ResultDispatcher {
     await this.teams.post(JSON.parse(refJson), formatTeamsResult(run.result, agent.name));
   }
 
+  private async postPrComment(result: string, payload: Record<string, unknown>): Promise<void> {
+    const isGitLab = (payload?.['object_attributes'] as Record<string, unknown>)?.['iid'] != null;
+    if (isGitLab && this.gitlab) { await this.postGitLabComment(result, payload); return; }
+    if (payload?.['pullrequest'] && this.bitbucket) { await this.postBitbucketComment(result, payload); return; }
+    console.warn('[ResultDispatcher] pr_comment: no matching platform client for payload shape');
+  }
+
   private async postGitLabComment(result: string, payload: Record<string, unknown>): Promise<void> {
     const project = (payload?.['project'] as Record<string, unknown>)?.['path_with_namespace'] as string;
     const mrIid = (payload?.['object_attributes'] as Record<string, unknown>)?.['iid'] as number;
     if (!project || !mrIid || !this.gitlab) return;
     const body = `### Agent Hub Review\n\n${result}`;
     await this.gitlab.postMrComment(project, mrIid, body);
+  }
+
+  private async postBitbucketComment(result: string, payload: Record<string, unknown>): Promise<void> {
+    const repo = (payload?.['repository'] as Record<string, unknown>)?.['full_name'] as string;
+    const prId = (payload?.['pullrequest'] as Record<string, unknown>)?.['id'] as number;
+    if (!repo || prId == null || !this.bitbucket) return;
+    await this.bitbucket.postPrComment(repo, prId, `### Agent Hub Review\n\n${result}`);
   }
 
   private async postJiraComment(result: string, payload: Record<string, unknown>): Promise<void> {

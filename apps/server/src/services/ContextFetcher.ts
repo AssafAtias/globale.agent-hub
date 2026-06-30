@@ -1,5 +1,6 @@
 import { GitLabClient, type MrContext, type MrPipeline, type MrDiscussionNote } from './GitLabClient.js';
 import { JiraClient, type JiraTicketContext } from './JiraClient.js';
+import { BitbucketClient } from './BitbucketClient.js';
 import type { ParsedWebhookEvent } from './WebhookMatcher.js';
 import { extractIssueKey } from './issueKey.js';
 
@@ -14,10 +15,12 @@ export interface FetchedContext {
 export class ContextFetcher {
   private gitlab?: GitLabClient;
   private jira?: JiraClient;
+  private bitbucket?: BitbucketClient;
 
-  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string) {
+  constructor(gitlabToken?: string, jiraToken?: string, jiraBaseUrl?: string, jiraEmail?: string, bitbucketToken?: string, bitbucketUsername?: string) {
     if (gitlabToken) this.gitlab = new GitLabClient(gitlabToken);
     if (jiraToken && jiraBaseUrl) this.jira = new JiraClient(jiraToken, jiraBaseUrl, jiraEmail);
+    if (bitbucketToken) this.bitbucket = new BitbucketClient(bitbucketToken, bitbucketUsername);
   }
 
   async fetch(event: ParsedWebhookEvent): Promise<FetchedContext> {
@@ -52,6 +55,28 @@ export class ContextFetcher {
             if (discussions.length > 0) ctx.discussions = discussions;
           } catch (e) {
             console.warn('[ContextFetcher] Failed to fetch MR discussions:', e);
+          }
+        }
+      }
+    }
+
+    if (event.platform === 'bitbucket' && this.bitbucket) {
+      const repo = (event.payload['repository'] as Record<string, unknown>)?.['full_name'] as string | undefined;
+      const prId = (event.payload['pullrequest'] as Record<string, unknown>)?.['id'] as number | undefined;
+      if (repo && prId != null) {
+        try {
+          ctx.mr = await this.bitbucket.getPrContext(repo, prId);
+        } catch (e) {
+          console.warn('[ContextFetcher] Failed to fetch Bitbucket PR context:', e);
+        }
+        if (ctx.mr) {
+          const key = extractIssueKey(ctx.mr.sourceBranch, ctx.mr.title, ctx.mr.description);
+          if (key && this.jira) {
+            try {
+              ctx.ticket = await this.jira.getTicket(key);
+            } catch (e) {
+              console.warn('[ContextFetcher] Failed to fetch linked Jira ticket:', e);
+            }
           }
         }
       }

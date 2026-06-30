@@ -75,3 +75,34 @@ describe('ContextFetcher.fetch MR enrichment', () => {
     expect(s).not.toContain('Existing MR Comments');
   });
 });
+
+describe('ContextFetcher.fetch Bitbucket', () => {
+  const event = {
+    platform: 'bitbucket',
+    eventType: 'mr:opened',
+    payload: { repository: { full_name: 'globaleteam/core' }, pullrequest: { id: 7 } },
+  };
+  function fakeFetcher() {
+    const f = new ContextFetcher(undefined, 'jt', 'https://j', 'e@x', 'bbtok');
+    (f as any).bitbucket = {
+      getPrContext: async () => ({
+        title: 'T', description: 'D', sourceBranch: 'feature/CORE-9-x',
+        targetBranch: 'main', mrUrl: 'u', diff: 'BBDIFF',
+      }),
+    };
+    (f as any).jira = { getTicket: async (k: string) => ({ key: k, summary: 'S', description: 'TD', status: 'Open', labels: [], url: 'u' }) };
+    return f;
+  }
+  it('fetches the PR diff and the linked Jira ticket', async () => {
+    const f = fakeFetcher();
+    const s = f.serializeForRunner(await f.fetch(event as any));
+    expect(s).toContain('BBDIFF');
+    expect(s).toContain('CORE-9: S');
+  });
+  it('is best-effort: a getPrContext throw does not crash fetch', async () => {
+    const f = fakeFetcher();
+    (f as any).bitbucket.getPrContext = async () => { throw new Error('boom'); };
+    const ctx = await f.fetch(event as any);
+    expect(ctx.mr).toBeUndefined();
+  });
+});
