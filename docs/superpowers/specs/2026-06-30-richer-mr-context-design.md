@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Repo:** `globale.agent-hub`
-**Status:** In Review
+**Status:** Approved (spec review passed)
 **Roadmap:** Phase 1B (see memory `agent-hub-roadmap`)
 
 ## Problem
@@ -37,6 +37,7 @@ export function extractIssueKey(sourceBranch: string, title: string, description
 ```
 - Scans, in priority order, `sourceBranch` → `title` → `description`; returns the first match of `/\b[A-Z][A-Z0-9]+-\d+\b/` (e.g. `CORE-211920`), else `null`.
 - Branch wins because Global-E branches are `…/CORE-XXXXXX-slug` / `bug/CORE-123`.
+- The regex is intentionally generic (any `ABC-123` key, not only `CORE-`). A stray non-CORE key is harmless: it's passed to `getTicket`, which 404s → caught by the best-effort try/catch (no ticket added). Known behavior, not a bug.
 - Pure, no I/O.
 
 ### Modify: `apps/server/src/services/GitLabClient.ts`
@@ -47,6 +48,7 @@ export interface MrPipeline { status: string; failedJobs: string[]; }
 export interface MrDiscussionNote { author: string; body: string; }
 
 // pipelinesJson: Array<{ id: number; status: string }>  → first element, or null if empty/garbage
+//   (GitLab returns this list newest-first, so [0] is the latest pipeline — no sort needed)
 export function parsePipeline(pipelinesJson: unknown): { id: number; status: string } | null
 // jobsJson: Array<{ name: string; status: string }>  → names where status === 'failed'
 export function parseFailedJobs(jobsJson: unknown): string[]
