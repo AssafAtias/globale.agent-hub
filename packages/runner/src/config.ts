@@ -6,6 +6,7 @@ export interface RunnerConfig {
   localReposRoot: string;
   skillsDir: string;
   workflowsDir: string;
+  toolsEnabled: boolean;
 }
 
 export function loadConfig(): RunnerConfig {
@@ -22,5 +23,6 @@ export function loadConfig(): RunnerConfig {
     localReposRoot: process.env.LOCAL_REPOS_ROOT ?? 'C:/GlobalE',
     skillsDir: process.env.SKILLS_DIR ?? 'C:/GlobalE/.claude/skills',
     workflowsDir: process.env.WORKFLOWS_DIR ?? 'C:/GlobalE/globale.agent-hub/workflows',
+    toolsEnabled: !['false', '0', 'no'].includes((process.env.AGENT_TOOLS_ENABLED ?? '').trim().toLowerCase()),
   };
 }
