@@ -8,6 +8,7 @@ import { ContextFetcher } from '../../services/ContextFetcher.js';
 import type { Environment } from '../../config/environment.js';
 import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 import { TeamsWebhookNotifier } from '../../services/teams/TeamsWebhookNotifier.js';
+import { planHandoff } from '../../services/handoff.js';
 
 export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
@@ -107,6 +108,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
           error: Type.Optional(Type.String()),
           gate: Type.Optional(Type.Any()),
           sessionId: Type.Optional(Type.String()),
+          handoff: Type.Optional(Type.Any()),
         }),
         response: { 200: Type.Object({ ok: Type.Boolean() }), 401: Type.Any() },
       },
@@ -141,6 +143,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
           }
         }
       } else {
+        const wasAlreadyDone = RunRepository.findById(req.params.id)?.status === 'done';
         RunRepository.complete(req.params.id, req.body.result ?? '', req.body.sessionId);
         // Fan out result to configured outputs (fire-and-forget)
         const completedRun = RunRepository.findById(req.params.id);
@@ -159,6 +162,21 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
           dispatcher.dispatch(completedRun, agent).catch(e =>
             app.log.error(e, 'ResultDispatcher error')
           );
+        }
+        if (!wasAlreadyDone && req.body.handoff?.agent && completedRun) {
+          try {
+            const target = AgentRepository.findBySlug(req.body.handoff.agent);
+            if (!target) { app.log.warn({ slug: req.body.handoff.agent }, 'handoff target not found'); }
+            else {
+              const plan = planHandoff(completedRun, target.id, String(req.body.handoff.message ?? ''));
+              if (plan.spawn) {
+                const child = RunRepository.create({ agentId: target.id, trigger: 'handoff', triggerPayload: plan.childTriggerPayload, context: plan.context });
+                app.log.info({ parent: completedRun.id, child: child.id, target: target.id }, 'handoff spawned');
+              } else {
+                app.log.warn({ parent: completedRun.id, reason: plan.reason }, 'handoff refused');
+              }
+            }
+          } catch (e) { app.log.error(e, 'handoff spawn failed'); }
         }
       }
       return reply.status(200).send({ ok: true });

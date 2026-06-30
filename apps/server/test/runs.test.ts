@@ -274,4 +274,40 @@ describe('Runs API', () => {
     await app.inject({ method: 'POST', url: `/api/runs/${id}/respond`, payload: { decision: 'reject', message: 'no' } });
     expect((await app.inject({ method: 'GET', url: `/api/runs/${id}` })).json().status).toBe('rejected');
   });
+
+  async function createAgentNamed(name: string) {
+    const res = await app.inject({ method: 'POST', url: '/api/agents',
+      payload: { name, type: 'pr-review', model: 'claude-haiku-4-5', prompt: 'p', repos: [], triggerRules: { events: [] }, outputs: [] } });
+    return res.json() as { id: string };
+  }
+
+  async function completeWithHandoff(runId: string, token: string, handoff: unknown) {
+    return app.inject({ method: 'POST', url: `/api/runs/${runId}/result`, headers: { 'x-runner-token': token },
+      payload: { result: 'reviewed', handoff } });
+  }
+
+  it('a handoff to a real agent completes the parent AND spawns a handoff child', async () => {
+    const reviewer = await createAgent();                 // pr-review
+    const fixer = await createAgentNamed('fixer');        // slugify('fixer') === 'fixer'
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: reviewer.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    await app.inject({ method: 'GET', url: '/api/runs/next', headers: { 'x-runner-token': reg.token } });
+    await completeWithHandoff(id, reg.token, { agent: 'fixer', message: 'fix the bug' });
+    const runs = (await app.inject({ method: 'GET', url: '/api/runs' })).json() as Array<any>;
+    expect(runs.find((r: any) => r.id === id).status).toBe('done');
+    const child = runs.find((r: any) => r.trigger === 'handoff' && r.agentId === fixer.id);
+    expect(child).toBeTruthy();
+    expect(JSON.parse(child.context)['Handoff request']).toBe('fix the bug');
+  });
+
+  it('an unknown handoff target completes the parent with no child', async () => {
+    const reviewer = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: reviewer.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    await app.inject({ method: 'GET', url: '/api/runs/next', headers: { 'x-runner-token': reg.token } });
+    await completeWithHandoff(id, reg.token, { agent: 'nope-not-real', message: 'x' });
+    const runs = (await app.inject({ method: 'GET', url: '/api/runs' })).json() as Array<any>;
+    expect(runs.find((r: any) => r.id === id).status).toBe('done');
+    expect(runs.some((r: any) => r.trigger === 'handoff')).toBe(false);
+  });
 });
