@@ -60,6 +60,28 @@ export class ContextFetcher {
       }
     }
 
+    if (event.platform === 'bitbucket' && this.bitbucket) {
+      const repo = (event.payload['repository'] as Record<string, unknown>)?.['full_name'] as string | undefined;
+      const prId = (event.payload['pullrequest'] as Record<string, unknown>)?.['id'] as number | undefined;
+      if (repo && prId != null) {
+        try {
+          ctx.mr = await this.bitbucket.getPrContext(repo, prId);
+        } catch (e) {
+          console.warn('[ContextFetcher] Failed to fetch Bitbucket PR context:', e);
+        }
+        if (ctx.mr) {
+          const key = extractIssueKey(ctx.mr.sourceBranch, ctx.mr.title, ctx.mr.description);
+          if (key && this.jira) {
+            try {
+              ctx.ticket = await this.jira.getTicket(key);
+            } catch (e) {
+              console.warn('[ContextFetcher] Failed to fetch linked Jira ticket:', e);
+            }
+          }
+        }
+      }
+    }
+
     if (event.platform === 'jira' && this.jira) {
       const issue = event.payload['issue'] as Record<string, unknown> | undefined;
       const key = issue?.['key'] as string | undefined;
