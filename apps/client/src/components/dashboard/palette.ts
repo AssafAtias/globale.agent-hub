@@ -12,7 +12,7 @@ export const colors = {
   live: '#4ade80',
 };
 
-export type WorkerState = 'working' | 'reviewing' | 'queued' | 'idle' | 'blocked';
+export type WorkerState = 'working' | 'reviewing' | 'queued' | 'idle' | 'blocked' | 'waiting';
 
 export const stateStyles: Record<WorkerState, { label: string; fg: string; bg: string }> = {
   working: { label: 'Working', fg: '#9ec1ff', bg: 'rgba(59,130,246,0.20)' },
@@ -20,6 +20,7 @@ export const stateStyles: Record<WorkerState, { label: string; fg: string; bg: s
   queued: { label: 'Queued', fg: '#9ec1ff', bg: 'rgba(59,130,246,0.12)' },
   idle: { label: 'Idle', fg: '#9a9aa0', bg: 'rgba(255,255,255,0.07)' },
   blocked: { label: 'Blocked', fg: '#f0908f', bg: 'rgba(220,70,70,0.20)' },
+  waiting: { label: 'Waiting', fg: '#e6b65c', bg: 'rgba(217,160,60,0.16)' },
 };
 
 export const runMarker: Record<string, string> = {

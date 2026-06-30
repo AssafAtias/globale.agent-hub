@@ -105,6 +105,8 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
         body: Type.Object({
           result: Type.Optional(Type.String()),
           error: Type.Optional(Type.String()),
+          gate: Type.Optional(Type.Any()),
+          sessionId: Type.Optional(Type.String()),
         }),
         response: { 200: Type.Object({ ok: Type.Boolean() }), 401: Type.Any() },
       },
@@ -112,8 +114,13 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
       const runner = RunnerRepository.findByToken(req.headers['x-runner-token']);
       if (!runner) return reply.status(401).send({ error: 'Invalid runner token' });
 
+      if (req.body.gate) {
+        RunRepository.pauseForGate(req.params.id, req.body.sessionId ?? '', JSON.stringify(req.body.gate));
+        return reply.status(200).send({ ok: true });
+      }
+
       if (req.body.error) {
-        RunRepository.fail(req.params.id, req.body.error);
+        RunRepository.fail(req.params.id, req.body.error, req.body.sessionId);
         const failedRun = RunRepository.findById(req.params.id);
         const failAgent = failedRun ? AgentRepository.findById(failedRun.agentId) : null;
         if (teamsNotifier && failedRun?.replyTo) {
@@ -134,7 +141,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
           }
         }
       } else {
-        RunRepository.complete(req.params.id, req.body.result ?? '');
+        RunRepository.complete(req.params.id, req.body.result ?? '', req.body.sessionId);
         // Fan out result to configured outputs (fire-and-forget)
         const completedRun = RunRepository.findById(req.params.id);
         const agent = completedRun ? AgentRepository.findById(completedRun.agentId) : null;
@@ -153,6 +160,27 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
             app.log.error(e, 'ResultDispatcher error')
           );
         }
+      }
+      return reply.status(200).send({ ok: true });
+    });
+
+    app.post('/api/runs/:id/respond', {
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({
+          decision: Type.Union([Type.Literal('approve'), Type.Literal('reject'), Type.Literal('answer')]),
+          message: Type.Optional(Type.String()),
+        }),
+        response: { 200: Type.Any(), 404: Type.Any(), 409: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (run.status !== 'waiting_approval') return reply.status(409).send({ error: 'Run is not awaiting approval' });
+      if (req.body.decision === 'reject') {
+        RunRepository.reject(req.params.id, req.body.message ?? 'Rejected by user');
+      } else {
+        RunRepository.resumeWithResponse(req.params.id, JSON.stringify({ decision: req.body.decision, message: req.body.message }));
       }
       return reply.status(200).send({ ok: true });
     });

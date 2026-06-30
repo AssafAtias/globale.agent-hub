@@ -236,4 +236,42 @@ describe('Runs API', () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().error).toBe('Agent is archived');
   });
+
+  it('result with a gate parks the run in waiting_approval', async () => {
+    const agent = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    await app.inject({ method: 'GET', url: '/api/runs/next', headers: { 'x-runner-token': reg.token } });
+    await app.inject({ method: 'POST', url: `/api/runs/${id}/result`, headers: { 'x-runner-token': reg.token },
+      payload: { sessionId: 'sess-1', gate: { id: 'g', summary: 's', question: 'q', kind: 'approve_reject' } } });
+    const run = (await app.inject({ method: 'GET', url: `/api/runs/${id}` })).json();
+    expect(run.status).toBe('waiting_approval');
+    expect(run.sessionId).toBe('sess-1');
+  });
+  it('respond approve re-queues a waiting run', async () => {
+    const agent = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    await app.inject({ method: 'GET', url: '/api/runs/next', headers: { 'x-runner-token': reg.token } });
+    await app.inject({ method: 'POST', url: `/api/runs/${id}/result`, headers: { 'x-runner-token': reg.token },
+      payload: { sessionId: 'sess-1', gate: { id: 'g', summary: 's', question: 'q', kind: 'approve_reject' } } });
+    const res = await app.inject({ method: 'POST', url: `/api/runs/${id}/respond`, payload: { decision: 'approve' } });
+    expect(res.statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: `/api/runs/${id}` })).json().status).toBe('pending');
+  });
+  it('respond returns 409 when run is not waiting_approval', async () => {
+    const agent = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } })).json();
+    expect((await app.inject({ method: 'POST', url: `/api/runs/${id}/respond`, payload: { decision: 'approve' } })).statusCode).toBe(409);
+  });
+  it('respond reject marks the run rejected', async () => {
+    const agent = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    await app.inject({ method: 'GET', url: '/api/runs/next', headers: { 'x-runner-token': reg.token } });
+    await app.inject({ method: 'POST', url: `/api/runs/${id}/result`, headers: { 'x-runner-token': reg.token },
+      payload: { sessionId: 'sess-1', gate: { id: 'g', summary: 's', question: 'q', kind: 'approve_reject' } } });
+    await app.inject({ method: 'POST', url: `/api/runs/${id}/respond`, payload: { decision: 'reject', message: 'no' } });
+    expect((await app.inject({ method: 'GET', url: `/api/runs/${id}` })).json().status).toBe('rejected');
+  });
 });

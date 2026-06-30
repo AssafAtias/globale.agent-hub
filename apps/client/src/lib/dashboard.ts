@@ -81,6 +81,8 @@ function stateFor(agent: Agent, latest: Run | null): WorkerState {
       return isReviewer(agent) ? 'reviewing' : 'working';
     case 'pending':
       return 'queued';
+    case 'waiting_approval':
+      return 'waiting';
     case 'failed':
       return 'blocked';
     default:

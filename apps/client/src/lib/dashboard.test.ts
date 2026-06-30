@@ -40,6 +40,13 @@ describe('buildWorkerCards', () => {
     expect(cards.find((c) => c.agent.id === 'a2')?.state).toBe('reviewing'));
   it('maps a pending run to queued', () =>
     expect(cards.find((c) => c.agent.id === 'a3')?.state).toBe('queued'));
+  it('maps a waiting_approval run to waiting', () => {
+    const cards = buildWorkerCards(
+      [agent({ id: 'aw', name: 'GatedAgent' })],
+      [run({ id: 'rw', agentId: 'aw', status: 'waiting_approval', createdAt: '2026-06-25T11:59:00.000Z' })],
+    );
+    expect(cards.find((c) => c.agent.id === 'aw')?.state).toBe('waiting');
+  });
 });
 
 describe('formatCycle', () => {

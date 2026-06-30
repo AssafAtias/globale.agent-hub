@@ -65,10 +65,15 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
 
       try {
         const memory = await fetchMemory(config, job.run.agentId);
-        const { result, note } = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled);
-        await postResult(config, job.run.id, { result });
-        if (note) await postMemory(config, job.run.agentId, { runId: job.run.id, note });
-        console.log(`[runner] Run ${job.run.id} completed`);
+        const outcome = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled);
+        if (outcome.kind === 'gate') {
+          await postResult(config, job.run.id, { gate: outcome.gate, sessionId: outcome.sessionId });
+          console.log(`[runner] Run ${job.run.id} paused at gate "${outcome.gate.id}"`);
+        } else {
+          await postResult(config, job.run.id, { result: outcome.result, sessionId: outcome.sessionId });
+          if (outcome.note) await postMemory(config, job.run.agentId, { runId: job.run.id, note: outcome.note });
+          console.log(`[runner] Run ${job.run.id} completed`);
+        }
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
         await postResult(config, job.run.id, { error });
@@ -84,7 +89,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
 async function postResult(
   config: RunnerConfig,
   runId: string,
-  body: { result?: string; error?: string },
+  body: { result?: string; error?: string; gate?: unknown; sessionId?: string },
 ) {
   const res = await fetch(`${config.orchestratorUrl}/api/runs/${runId}/result`, {
     method: 'POST',

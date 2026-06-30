@@ -33,6 +33,7 @@ export interface Run {
   id: string; agentId: string; trigger: string; status: string;
   result: string | null; error: string | null; createdAt: string; finishedAt: string | null;
   archived: boolean;
+  sessionId?: string | null; pendingGate?: string | null;
 }
 export interface Runner {
   id: string; name: string; status: string; lastSeen: string;
@@ -69,6 +70,8 @@ export const api = {
     trigger: (agentId: string) => req<Run>('/api/runs', { method: 'POST', body: JSON.stringify({ agentId }) }),
     setArchived: (id: string, archived: boolean) =>
       req<Run>(`/api/runs/${id}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
+    respond: (id: string, body: { decision: 'approve' | 'reject' | 'answer'; message?: string }) =>
+      req<{ ok: boolean }>(`/api/runs/${id}/respond`, { method: 'POST', body: JSON.stringify(body) }),
   },
   runners: {
     list: () => req<Runner[]>('/api/runners'),
