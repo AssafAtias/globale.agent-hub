@@ -65,7 +65,10 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
 
       try {
         const memory = await fetchMemory(config, job.run.agentId);
-        const outcome = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled);
+        let seq = 0;
+        const onProgress = (e: { kind: string; label: string; detail?: string }) =>
+          postEvent(config, job.run.id, { seq: seq++, ...e }).catch(() => { /* best-effort */ });
+        const outcome = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled, config.runEventsEnabled, onProgress);
         if (outcome.kind === 'gate') {
           await postResult(config, job.run.id, { gate: outcome.gate, sessionId: outcome.sessionId });
           console.log(`[runner] Run ${job.run.id} paused at gate "${outcome.gate.id}"`);
@@ -84,6 +87,14 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
       await sleep(5000);
     }
   }
+}
+
+async function postEvent(config: RunnerConfig, runId: string, body: { seq: number; kind: string; label: string; detail?: string }): Promise<void> {
+  await fetch(`${config.orchestratorUrl}/api/runs/${runId}/events`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-runner-token': config.runnerToken },
+    body: JSON.stringify(body),
+  });
 }
 
 async function postResult(

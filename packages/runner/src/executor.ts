@@ -159,7 +159,7 @@ const GATE_PROTOCOL =
 
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
-  memory: MemoryInput, toolsEnabled: boolean,
+  memory: MemoryInput, toolsEnabled: boolean, runEventsEnabled: boolean = false, onProgress?: OnProgress,
 ): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string; handoff: HandoffPayload | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -194,7 +194,7 @@ export async function executeJob(
   const fresh = !job.run.sessionId;
   const sessionId = job.run.sessionId ?? randomUUID();
   const userMessage = fresh ? contextText : renderResponse(job.run.pendingResponse);
-  const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh });
+  const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh, streaming: runEventsEnabled, onProgress });
   const { gate } = extractGate(raw);
   if (gate) return { kind: 'gate' as const, gate, sessionId };
   const { result: afterHandoff, handoff } = extractHandoff(raw);
@@ -222,7 +222,7 @@ interface CliResult {
 // the subscription login rather than mistaking the token for an API key.
 async function runClaude(
   model: string, systemPrompt: string, userMessage: string, cwd: string, toolArgs: string[],
-  opts: { sessionId: string; resume: boolean },
+  opts: { sessionId: string; resume: boolean; streaming: boolean; onProgress?: OnProgress },
 ): Promise<string> {
   const sysFile = join(tmpdir(), `agent-hub-sys-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`);
   if (!opts.resume) { writeFileSync(sysFile, systemPrompt, 'utf8'); }
@@ -235,40 +235,73 @@ async function runClaude(
   const promptArgs = opts.resume ? [] : ['--append-system-prompt-file', `"${sysFile}"`];
 
   try {
-    const stdout = await new Promise<string>((resolve, reject) => {
+    if (!opts.streaming) {
+      const stdout = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          'claude',
+          ['-p', '--model', model, '--output-format', 'json', ...sessionArgs, ...promptArgs, ...toolArgs],
+          { cwd, env, shell: true },
+        );
+        let out = '';
+        let err = '';
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`));
+        }, CLI_TIMEOUT_MS);
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { err += d; });
+        child.on('error', (e) => { clearTimeout(timer); reject(e); });
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          if (code !== 0) reject(new Error(`claude CLI exited ${code}: ${(err.trim() || out.trim()).slice(0, 500)}`));
+          else resolve(out);
+        });
+        child.stdin.write(userMessage);
+        child.stdin.end();
+      });
+
+      let parsed: CliResult;
+      try {
+        parsed = JSON.parse(stdout) as CliResult;
+      } catch {
+        throw new Error(`claude CLI returned non-JSON output: ${stdout.slice(0, 500)}`);
+      }
+      if (parsed.is_error || (parsed.subtype && parsed.subtype !== 'success')) {
+        throw new Error(`claude CLI error (${parsed.subtype ?? 'unknown'}): ${parsed.result ?? 'no detail'}`);
+      }
+      return (parsed.result ?? '').trim() || '(no output)';
+    }
+
+    return await new Promise<string>((resolve, reject) => {
       const child = spawn(
         'claude',
-        ['-p', '--model', model, '--output-format', 'json', ...sessionArgs, ...promptArgs, ...toolArgs],
+        ['-p', '--model', model, '--output-format', 'stream-json', '--verbose', ...sessionArgs, ...promptArgs, ...toolArgs],
         { cwd, env, shell: true },
       );
-      let out = '';
+      const lines: string[] = [];
+      let buf = '';
+      const timer = setTimeout(() => { child.kill(); reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`)); }, CLI_TIMEOUT_MS);
+      child.stdout.on('data', (d) => {
+        buf += d.toString();
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          lines.push(line);
+          try { for (const ev of summarizeStreamEvent(JSON.parse(line))) opts.onProgress?.(ev); } catch { /* skip non-JSON line */ }
+        }
+      });
       let err = '';
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`));
-      }, CLI_TIMEOUT_MS);
-      child.stdout.on('data', (d) => { out += d; });
       child.stderr.on('data', (d) => { err += d; });
       child.on('error', (e) => { clearTimeout(timer); reject(e); });
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (code !== 0) reject(new Error(`claude CLI exited ${code}: ${(err.trim() || out.trim()).slice(0, 500)}`));
-        else resolve(out);
+        if (buf.trim()) lines.push(buf); // flush trailing partial line (may be the result event)
+        if (code !== 0) { reject(new Error(`claude CLI exited ${code}: ${(err.trim() || lines.join('\n')).slice(0, 500)}`)); return; }
+        try { resolve(extractStreamResult(lines)); } catch (e) { reject(e); }
       });
-      child.stdin.write(userMessage);
-      child.stdin.end();
+      child.stdin.write(userMessage); child.stdin.end();
     });
-
-    let parsed: CliResult;
-    try {
-      parsed = JSON.parse(stdout) as CliResult;
-    } catch {
-      throw new Error(`claude CLI returned non-JSON output: ${stdout.slice(0, 500)}`);
-    }
-    if (parsed.is_error || (parsed.subtype && parsed.subtype !== 'success')) {
-      throw new Error(`claude CLI error (${parsed.subtype ?? 'unknown'}): ${parsed.result ?? 'no detail'}`);
-    }
-    return (parsed.result ?? '').trim() || '(no output)';
   } finally {
     try { unlinkSync(sysFile); } catch { /* best-effort cleanup */ }
   }
