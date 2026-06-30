@@ -1,10 +1,13 @@
-import { GitLabClient, type MrContext } from './GitLabClient.js';
+import { GitLabClient, type MrContext, type MrPipeline, type MrDiscussionNote } from './GitLabClient.js';
 import { JiraClient, type JiraTicketContext } from './JiraClient.js';
 import type { ParsedWebhookEvent } from './WebhookMatcher.js';
+import { extractIssueKey } from './issueKey.js';
 
 export interface FetchedContext {
   mr?: MrContext;
   ticket?: JiraTicketContext;
+  pipeline?: MrPipeline;
+  discussions?: MrDiscussionNote[];
   rawPayload: Record<string, unknown>;
 }
 
@@ -24,10 +27,32 @@ export class ContextFetcher {
       const attrs = event.payload['object_attributes'] as Record<string, unknown>;
       const project = (event.payload['project'] as Record<string, unknown>)?.['path_with_namespace'] as string;
       if (project && attrs?.['iid']) {
+        const iid = attrs['iid'] as number;
         try {
-          ctx.mr = await this.gitlab.getMrContext(project, attrs['iid'] as number);
+          ctx.mr = await this.gitlab.getMrContext(project, iid);
         } catch (e) {
           console.warn('[ContextFetcher] Failed to fetch MR context:', e);
+        }
+        if (ctx.mr) {
+          const key = extractIssueKey(ctx.mr.sourceBranch, ctx.mr.title, ctx.mr.description);
+          if (key && this.jira) {
+            try {
+              ctx.ticket = await this.jira.getTicket(key);
+            } catch (e) {
+              console.warn('[ContextFetcher] Failed to fetch linked Jira ticket:', e);
+            }
+          }
+          try {
+            ctx.pipeline = (await this.gitlab.getMrPipeline(project, iid)) ?? undefined;
+          } catch (e) {
+            console.warn('[ContextFetcher] Failed to fetch MR pipeline:', e);
+          }
+          try {
+            const discussions = await this.gitlab.getMrDiscussions(project, iid);
+            if (discussions.length > 0) ctx.discussions = discussions;
+          } catch (e) {
+            console.warn('[ContextFetcher] Failed to fetch MR discussions:', e);
+          }
         }
       }
     }
@@ -66,6 +91,14 @@ export class ContextFetcher {
       parts['Jira Ticket'] = `${ctx.ticket.key}: ${ctx.ticket.summary}`;
       parts['Status'] = ctx.ticket.status;
       parts['Description'] = ctx.ticket.description;
+    }
+    if (ctx.pipeline) {
+      parts['Pipeline'] = ctx.pipeline.failedJobs.length > 0
+        ? `${ctx.pipeline.status}\nFailed jobs: ${ctx.pipeline.failedJobs.join(', ')}`
+        : ctx.pipeline.status;
+    }
+    if (ctx.discussions && ctx.discussions.length > 0) {
+      parts['Existing MR Comments'] = ctx.discussions.map((n) => `- ${n.author}: ${n.body}`).join('\n');
     }
     if (Object.keys(parts).length === 0) {
       parts['Raw Payload'] = JSON.stringify(ctx.rawPayload, null, 2).slice(0, 4000);
