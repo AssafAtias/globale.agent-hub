@@ -1,28 +1,16 @@
 import { Cron } from 'croner';
 
-/**
- * Compute the most recent scheduled slot at or before `now`.
- * Uses msToNext to derive the interval, avoiding the absent `previousRuns` API in croner 9.x.
- * Returns null when the cron has no previous slot (e.g. startAt is in the future).
- */
-function getPreviousSlot(cronExpr: string, now: Date): Date | null {
-  const c = new Cron(cronExpr);
-  const msToNext = c.msToNext(now);
-  if (msToNext === null) return null;
-  const nextRun = new Date(now.getTime() + msToNext);
-  const interval = c.msToNext(new Date(nextRun.getTime() + 1));
-  if (interval === null) return null;
-  // Round down to nearest second to get the exact slot start
-  return new Date(Math.floor((nextRun.getTime() - interval) / 1000) * 1000);
-}
-
 /** True when a scheduled slot has elapsed since the last scheduled run (or it never ran). */
 export function isDue(cronExpr: string, lastScheduledAtIso: string | null, now: Date): boolean {
   try {
-    const prev = getPreviousSlot(cronExpr, now);
-    if (!prev) return false;
-    if (lastScheduledAtIso === null) return true;
-    return new Date(lastScheduledAtIso) < prev;
+    const cron = new Cron(cronExpr);
+    if (lastScheduledAtIso === null) {
+      // Never fired: due if the expression yields any upcoming run (valid recurring schedule).
+      return cron.nextRun(now) !== null;
+    }
+    // Due if a scheduled slot fell in (lastScheduled, now]. nextRun handles non-uniform schedules natively.
+    const next = cron.nextRun(new Date(lastScheduledAtIso));
+    return next !== null && next.getTime() <= now.getTime();
   } catch {
     return false;
   }

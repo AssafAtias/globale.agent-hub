@@ -14,6 +14,12 @@ describe('isDue', () => {
   it('is NOT due for an invalid cron expression', () => {
     expect(isDue('not a cron', null, now)).toBe(false);
   });
+  it('non-uniform: weekday-2am is NOT due on Saturday (next slot is Monday)', () => {
+    expect(isDue('0 2 * * 1-5', '2026-07-03T02:00:00', new Date('2026-07-04T12:00:00'))).toBe(false);
+  });
+  it('non-uniform: weekday-2am IS due on Monday after a Friday run', () => {
+    expect(isDue('0 2 * * 1-5', '2026-07-03T02:00:00', new Date('2026-07-06T02:00:30'))).toBe(true);
+  });
 });
 
 describe('parseCronFromTriggerRules', () => {
