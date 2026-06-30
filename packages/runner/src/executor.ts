@@ -48,6 +48,53 @@ const MEMORY_INSTRUCTION =
   '<memory-update>...</memory-update> block containing a concise note (what you did / what you learned). ' +
   'Write nothing there if there is nothing worth remembering.';
 
+export interface ProgressEvent { kind: string; label: string; detail?: string }
+export type OnProgress = (e: ProgressEvent) => void;
+
+/** Reconstruct the final result string from a stream-json transcript — must match json mode. */
+export function extractStreamResult(lines: string[]): string {
+  let resultEvt: { subtype?: string; is_error?: boolean; result?: string } | null = null;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    let e: any;
+    try { e = JSON.parse(t); } catch { continue; }
+    if (e && e.type === 'result') resultEvt = e; // last result event wins
+  }
+  if (!resultEvt) throw new Error('claude stream-json produced no result event');
+  if (resultEvt.is_error || (resultEvt.subtype && resultEvt.subtype !== 'success')) {
+    throw new Error(`claude CLI error (${resultEvt.subtype ?? 'unknown'}): ${(resultEvt.result ?? 'no detail').toString().slice(0, 500)}`);
+  }
+  return (resultEvt.result ?? '').trim() || '(no output)';
+}
+
+function summarizeToolInput(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const o = input as Record<string, unknown>;
+  const v = o.file_path ?? o.command ?? o.pattern ?? o.path ?? o.url;
+  if (typeof v === 'string') return v.slice(0, 120);
+  try { return JSON.stringify(o).slice(0, 120); } catch { return undefined; }
+}
+
+/** Map one parsed stream-json event to zero+ readable progress events. */
+export function summarizeStreamEvent(evt: unknown): ProgressEvent[] {
+  if (!evt || typeof evt !== 'object') return [];
+  const o = evt as any;
+  if (o.type === 'system' && o.subtype === 'init') return [{ kind: 'system', label: 'session started' }];
+  if (o.type === 'assistant' && Array.isArray(o.message?.content)) {
+    const out: ProgressEvent[] = [];
+    for (const b of o.message.content) {
+      if (b?.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
+        out.push({ kind: 'assistant', label: 'responding', detail: b.text.trim().slice(0, 120) });
+      } else if (b?.type === 'tool_use') {
+        out.push({ kind: 'tool', label: typeof b.name === 'string' ? b.name : 'tool', detail: summarizeToolInput(b.input) });
+      }
+    }
+    return out;
+  }
+  return [];
+}
+
 export function extractMemoryUpdate(text: string): { result: string; note: string | null } {
   const m = text.match(/<memory-update>([\s\S]*?)<\/memory-update>/);
   if (!m) return { result: text, note: null };
@@ -112,7 +159,7 @@ const GATE_PROTOCOL =
 
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
-  memory: MemoryInput, toolsEnabled: boolean,
+  memory: MemoryInput, toolsEnabled: boolean, runEventsEnabled: boolean = false, onProgress?: OnProgress,
 ): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string; handoff: HandoffPayload | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -147,7 +194,7 @@ export async function executeJob(
   const fresh = !job.run.sessionId;
   const sessionId = job.run.sessionId ?? randomUUID();
   const userMessage = fresh ? contextText : renderResponse(job.run.pendingResponse);
-  const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh });
+  const raw = await runClaude(job.agent.model, systemPrompt, userMessage, cwd, toolArgs, { sessionId, resume: !fresh, streaming: runEventsEnabled, onProgress });
   const { gate } = extractGate(raw);
   if (gate) return { kind: 'gate' as const, gate, sessionId };
   const { result: afterHandoff, handoff } = extractHandoff(raw);
@@ -175,7 +222,7 @@ interface CliResult {
 // the subscription login rather than mistaking the token for an API key.
 async function runClaude(
   model: string, systemPrompt: string, userMessage: string, cwd: string, toolArgs: string[],
-  opts: { sessionId: string; resume: boolean },
+  opts: { sessionId: string; resume: boolean; streaming: boolean; onProgress?: OnProgress },
 ): Promise<string> {
   const sysFile = join(tmpdir(), `agent-hub-sys-${Date.now()}-${Math.floor(Math.random() * 1e6)}.txt`);
   if (!opts.resume) { writeFileSync(sysFile, systemPrompt, 'utf8'); }
@@ -188,40 +235,73 @@ async function runClaude(
   const promptArgs = opts.resume ? [] : ['--append-system-prompt-file', `"${sysFile}"`];
 
   try {
-    const stdout = await new Promise<string>((resolve, reject) => {
+    if (!opts.streaming) {
+      const stdout = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          'claude',
+          ['-p', '--model', model, '--output-format', 'json', ...sessionArgs, ...promptArgs, ...toolArgs],
+          { cwd, env, shell: true },
+        );
+        let out = '';
+        let err = '';
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`));
+        }, CLI_TIMEOUT_MS);
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { err += d; });
+        child.on('error', (e) => { clearTimeout(timer); reject(e); });
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          if (code !== 0) reject(new Error(`claude CLI exited ${code}: ${(err.trim() || out.trim()).slice(0, 500)}`));
+          else resolve(out);
+        });
+        child.stdin.write(userMessage);
+        child.stdin.end();
+      });
+
+      let parsed: CliResult;
+      try {
+        parsed = JSON.parse(stdout) as CliResult;
+      } catch {
+        throw new Error(`claude CLI returned non-JSON output: ${stdout.slice(0, 500)}`);
+      }
+      if (parsed.is_error || (parsed.subtype && parsed.subtype !== 'success')) {
+        throw new Error(`claude CLI error (${parsed.subtype ?? 'unknown'}): ${parsed.result ?? 'no detail'}`);
+      }
+      return (parsed.result ?? '').trim() || '(no output)';
+    }
+
+    return await new Promise<string>((resolve, reject) => {
       const child = spawn(
         'claude',
-        ['-p', '--model', model, '--output-format', 'json', ...sessionArgs, ...promptArgs, ...toolArgs],
+        ['-p', '--model', model, '--output-format', 'stream-json', '--verbose', ...sessionArgs, ...promptArgs, ...toolArgs],
         { cwd, env, shell: true },
       );
-      let out = '';
+      const lines: string[] = [];
+      let buf = '';
+      const timer = setTimeout(() => { child.kill(); reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`)); }, CLI_TIMEOUT_MS);
+      child.stdout.on('data', (d) => {
+        buf += d.toString();
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          lines.push(line);
+          try { for (const ev of summarizeStreamEvent(JSON.parse(line))) opts.onProgress?.(ev); } catch { /* skip non-JSON line */ }
+        }
+      });
       let err = '';
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error(`claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`));
-      }, CLI_TIMEOUT_MS);
-      child.stdout.on('data', (d) => { out += d; });
       child.stderr.on('data', (d) => { err += d; });
       child.on('error', (e) => { clearTimeout(timer); reject(e); });
       child.on('close', (code) => {
         clearTimeout(timer);
-        if (code !== 0) reject(new Error(`claude CLI exited ${code}: ${(err.trim() || out.trim()).slice(0, 500)}`));
-        else resolve(out);
+        if (buf.trim()) lines.push(buf); // flush trailing partial line (may be the result event)
+        if (code !== 0) { reject(new Error(`claude CLI exited ${code}: ${(err.trim() || lines.join('\n')).slice(0, 500)}`)); return; }
+        try { resolve(extractStreamResult(lines)); } catch (e) { reject(e); }
       });
-      child.stdin.write(userMessage);
-      child.stdin.end();
+      child.stdin.write(userMessage); child.stdin.end();
     });
-
-    let parsed: CliResult;
-    try {
-      parsed = JSON.parse(stdout) as CliResult;
-    } catch {
-      throw new Error(`claude CLI returned non-JSON output: ${stdout.slice(0, 500)}`);
-    }
-    if (parsed.is_error || (parsed.subtype && parsed.subtype !== 'success')) {
-      throw new Error(`claude CLI error (${parsed.subtype ?? 'unknown'}): ${parsed.result ?? 'no detail'}`);
-    }
-    return (parsed.result ?? '').trim() || '(no output)';
   } finally {
     try { unlinkSync(sysFile); } catch { /* best-effort cleanup */ }
   }

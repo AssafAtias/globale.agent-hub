@@ -8,11 +8,13 @@ import TextField from '@mui/material/TextField';
 import { useParams } from 'react-router-dom';
 import { useRun } from '../hooks/useRuns.js';
 import { useRespondToRun } from '../hooks/useRespondToRun.js';
+import { useRunEvents } from '../hooks/useRunEvents.js';
 import { RunStatusBadge } from '../components/RunStatusBadge.js';
 
 export function RunDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: run, isLoading } = useRun(id ?? '');
+  const { data: events } = useRunEvents(id ?? '', run?.status);
   const respond = useRespondToRun();
   const [answer, setAnswer] = useState('');
 
@@ -71,6 +73,18 @@ export function RunDetailPage() {
           </Box>
         );
       })()}
+      {events && events.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>Activity</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {events.map((e) => (
+              <Typography key={e.seq} variant="body2" color="text.secondary">
+                <strong>{e.kind === 'tool' ? `🔧 ${e.label}` : e.label}</strong>{e.detail ? ` — ${e.detail}` : ''}
+              </Typography>
+            ))}
+          </Box>
+        </Box>
+      )}
       {run.result && (
         <Paper sx={{ p: 2, mt: 2, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.85rem' }}>
           {run.result}

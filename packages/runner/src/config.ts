@@ -7,6 +7,7 @@ export interface RunnerConfig {
   skillsDir: string;
   workflowsDir: string;
   toolsEnabled: boolean;
+  runEventsEnabled: boolean;
 }
 
 export function loadConfig(): RunnerConfig {
@@ -24,5 +25,6 @@ export function loadConfig(): RunnerConfig {
     skillsDir: process.env.SKILLS_DIR ?? 'C:/GlobalE/.claude/skills',
     workflowsDir: process.env.WORKFLOWS_DIR ?? 'C:/GlobalE/globale.agent-hub/workflows',
     toolsEnabled: !['false', '0', 'no'].includes((process.env.AGENT_TOOLS_ENABLED ?? '').trim().toLowerCase()),
+    runEventsEnabled: !['false', '0', 'no'].includes((process.env.RUN_EVENTS_ENABLED ?? '').trim().toLowerCase()),
   };
 }

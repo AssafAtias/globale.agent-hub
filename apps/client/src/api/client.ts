@@ -46,6 +46,13 @@ export interface TeamsStatus {
   webhook: { connected: boolean };
 }
 
+export interface RunEvent {
+  seq: number;
+  kind: string;
+  label: string;
+  detail?: string;
+}
+
 export const api = {
   agents: {
     list: (includeArchived = false) =>
@@ -73,6 +80,7 @@ export const api = {
       req<Run>(`/api/runs/${id}`, { method: 'PATCH', body: JSON.stringify({ archived }) }),
     respond: (id: string, body: { decision: 'approve' | 'reject' | 'answer'; message?: string }) =>
       req<{ ok: boolean }>(`/api/runs/${id}/respond`, { method: 'POST', body: JSON.stringify(body) }),
+    events: (id: string) => req<RunEvent[]>(`/api/runs/${id}/events`),
   },
   runners: {
     list: () => req<Runner[]>('/api/runners'),

@@ -9,6 +9,7 @@ import type { Environment } from '../../config/environment.js';
 import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 import { TeamsWebhookNotifier } from '../../services/teams/TeamsWebhookNotifier.js';
 import { planHandoff } from '../../services/handoff.js';
+import { RunEventStore } from '../../services/RunEventStore.js';
 
 export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
@@ -181,6 +182,24 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
       }
       return reply.status(200).send({ ok: true });
     });
+
+    app.post('/api/runs/:id/events', {
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        headers: Type.Object({ 'x-runner-token': Type.String() }, { additionalProperties: true }),
+        body: Type.Object({ seq: Type.Number(), kind: Type.String(), label: Type.String(), detail: Type.Optional(Type.String()) }),
+        response: { 200: Type.Object({ ok: Type.Boolean() }), 401: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const runner = RunnerRepository.findByToken(req.headers['x-runner-token'] as string);
+      if (!runner) return reply.status(401).send({ error: 'Invalid runner token' });
+      RunEventStore.append(req.params.id, req.body);
+      return reply.status(200).send({ ok: true });
+    });
+
+    app.get('/api/runs/:id/events', {
+      schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Array(Type.Any()) } },
+    }, async (req) => RunEventStore.list(req.params.id));
 
     app.post('/api/runs/:id/respond', {
       schema: {
