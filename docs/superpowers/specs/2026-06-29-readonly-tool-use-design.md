@@ -39,6 +39,7 @@ resolveRepoPaths(reposRoot: string, repos: string[]): string[]
 ```
 - For each entry in `repos` (e.g. `gitlab:global-e/core/checkout/GlobalE.Core.Checkout.Apps`), take the last path segment as the repo name and resolve `join(reposRoot, name)`.
 - Return the subset of those paths whose **directory** exists (`existsSync(dirPath)`), de-duplicated, order-preserving. Empty input or none-exist → `[]`.
+- **Path-traversal containment (required):** the repo name comes from `job.agent.repos` (DB-sourced). Reject any name that escapes `reposRoot` — a name of `..`/`.`/`''`, or any resolved path that is not strictly contained within `reposRoot` (e.g. `join(reposRoot,'..')` = `C:\`). Compute `rel = relative(reposRoot, dirPath)` and skip the entry if `rel === '' || rel.startsWith('..') || isAbsolute(rel)`. Without this, a malformed repo value would grant the read-only agent access to the entire drive.
 - **`LocalEnricher` refactor — preserve semantics exactly.** `LocalEnricher` today checks `existsSync(claudeMd)` (a FILE), not the directory, and reads/slices the first `CLAUDE.md` it finds. After the refactor it must call `resolveRepoPaths(reposRoot, repos)` to get existing repo **dirs**, then for each returned dir do its OWN `existsSync(join(dir, 'CLAUDE.md'))` check, reading+slicing the first hit and breaking. Do NOT assume a returned dir has a `CLAUDE.md`; the file check stays in `LocalEnricher`. This keeps current behavior (a repo dir with no `CLAUDE.md` simply yields no injected `CLAUDE.md`, as today).
 
 ### New: `packages/runner/src/toolPolicy.ts`
@@ -48,7 +49,7 @@ buildToolArgs(opts: { enabled: boolean; repoPaths: string[] }): string[]
 - If `!enabled` → return `[]` (exact current behavior; back-compat).
 - Else return a flag array, in this exact order so each variadic flag is
   terminated by the next flag:
-  `--permission-mode default --allowedTools <allow-tokens…> --disallowedTools "Write" "Edit" "NotebookEdit" --add-dir "<path>"…`
+  `--permission-mode dontAsk --allowedTools <allow-tokens…> --disallowedTools "Write" "Edit" "NotebookEdit" --add-dir "<path>"…`
   where the trailing `--add-dir "<path>"` is repeated **once per path in `repoPaths.slice(1)`** (the non-cwd repos). When `repoPaths.length <= 1`, no `--add-dir` is emitted.
 - The **cwd** (first repo path vs `reposRoot` fallback) is decided in `runClaude`, not here — `buildToolArgs` only emits flags. `repoPaths` is passed so `--add-dir` covers the non-cwd repos.
 
@@ -65,7 +66,7 @@ not quoted. (Cross-platform note: a POSIX shell also strips the literal `"` befo
 **Exact returned `string[]`** for `enabled:true`, `repoPaths = ['C:/GlobalE/Apps','C:/GlobalE/core']`:
 ```js
 [
-  '--permission-mode', 'default',
+  '--permission-mode', 'dontAsk',
   '--allowedTools',
     '"Read"', '"Grep"', '"Glob"',
     '"Bash(git log:*)"', '"Bash(git diff:*)"', '"Bash(git show:*)"', '"Bash(git status:*)"',
@@ -96,8 +97,9 @@ async function runClaude(
 
 - In `executeJob`: parse `job.agent.repos` (reuse the existing safe-parse), call
   `const repoPaths = resolveRepoPaths(localReposRoot, repos)`, compute
-  `const cwd = repoPaths[0] ?? localReposRoot`, and
-  `const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths })`. Then
+  `const cwd = toolsEnabled ? (repoPaths[0] ?? localReposRoot) : localReposRoot`
+  (so the disabled/text-only path keeps the exact prior cwd = `localReposRoot` — strict back-compat),
+  and `const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths })`. Then
   `runClaude(job.agent.model, systemPrompt, contextText, cwd, toolArgs)`.
 - In `runClaude`: the `spawn` args become the current fixed flags **plus** `...toolArgs` appended after `--append-system-prompt-file "<sysFile>"`. `cwd` is the passed value (no longer hard-wired to `localReposRoot`). Everything else (env strip of `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, `shell: true`, JSON output parsing, 10-min timeout, sys-file cleanup) unchanged.
 
@@ -120,7 +122,7 @@ Replace its inline repoName→path resolution with a call to `resolveRepoPaths` 
 
 - **No repos resolve on disk:** `repoPaths` is empty → cwd falls back to `reposRoot`, no `--add-dir`. With `toolsEnabled` true the agent still gets Read/Grep/Glob/git rooted at `reposRoot` (broad but read-only); this matches the "whole root" fallback and is never worse than today.
 - **Kill-switch off:** `buildToolArgs` returns `[]`; the invocation is byte-for-byte the current text-only one.
-- **A tool the model tries that isn't allow-listed:** denied by `--permission-mode default` (no TTY in `-p`); the run continues. No special handling needed.
+- **A tool the model tries that isn't allow-listed:** auto-denied by `--permission-mode dontAsk`; the run continues (no prompt, no hang). No special handling needed.
 
 ## Risks (documented, accepted)
 
