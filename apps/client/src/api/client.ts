@@ -34,6 +34,7 @@ export interface Run {
   result: string | null; error: string | null; createdAt: string; finishedAt: string | null;
   archived: boolean;
   sessionId?: string | null; pendingGate?: string | null;
+  triggerPayload?: string | null;
 }
 export interface Runner {
   id: string; name: string; status: string; lastSeen: string;
