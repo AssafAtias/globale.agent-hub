@@ -310,4 +310,21 @@ describe('Runs API', () => {
     expect(runs.find((r: any) => r.id === id).status).toBe('done');
     expect(runs.some((r: any) => r.trigger === 'handoff')).toBe(false);
   });
+
+  it('POST /events appends (with runner token) and GET /events returns them', async () => {
+    const agent = await createAgent();
+    const { id } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { agentId: agent.id } })).json();
+    const reg = (await app.inject({ method: 'POST', url: '/api/runners/register', payload: { name: 'r' } })).json();
+    const post = await app.inject({ method: 'POST', url: `/api/runs/${id}/events`, headers: { 'x-runner-token': reg.token },
+      payload: { seq: 0, kind: 'tool', label: 'Read', detail: 'foo.ts' } });
+    expect(post.statusCode).toBe(200);
+    const events = (await app.inject({ method: 'GET', url: `/api/runs/${id}/events` })).json();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ seq: 0, kind: 'tool', label: 'Read', detail: 'foo.ts' });
+  });
+  it('POST /events rejects a bad runner token with 401', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/runs/whatever/events', headers: { 'x-runner-token': 'nope' },
+      payload: { seq: 0, kind: 'x', label: 'y' } });
+    expect(res.statusCode).toBe(401);
+  });
 });
