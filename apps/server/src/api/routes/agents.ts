@@ -13,6 +13,7 @@ const AgentBody = Type.Object({
     events: Type.Array(Type.String()),
     branchFilter: Type.Optional(Type.String()),
     jiraLabel: Type.Optional(Type.String()),
+    cron: Type.Optional(Type.String()),
   }),
   outputs: Type.Array(Type.String()),
   enabled: Type.Optional(Type.Boolean()),
