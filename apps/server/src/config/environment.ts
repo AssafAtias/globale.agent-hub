@@ -29,6 +29,9 @@ export type Environment = {
   MICROSOFT_APP_TYPE: string | undefined;
   TEAMS_ALLOWED_USER_IDS: string[];
   TEAMS_WEBHOOK_URL: string | undefined;
+  BITBUCKET_API_TOKEN: string | undefined;
+  BITBUCKET_USERNAME: string | undefined;
+  BITBUCKET_WEBHOOK_SECRET: string | undefined;
 };
 
 export function loadConfig(): Environment {
@@ -50,6 +53,9 @@ export function loadConfig(): Environment {
     TEAMS_ALLOWED_USER_IDS: (process.env.TEAMS_ALLOWED_USER_IDS ?? '')
       .split(',').map(s => s.trim()).filter(Boolean),
     TEAMS_WEBHOOK_URL: process.env.TEAMS_WEBHOOK_URL,
+    BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
+    BITBUCKET_USERNAME: process.env.BITBUCKET_USERNAME,
+    BITBUCKET_WEBHOOK_SECRET: process.env.BITBUCKET_WEBHOOK_SECRET,
   };
 
   return config;
