@@ -21,6 +21,7 @@ describe('buildVwoAgentInput', () => {
     expect(a.prompt).toContain('x-vwo-campaigns');
     expect(a.prompt).toContain('ShippingAddressValidation');
     expect(a.prompt).toContain('curl -sS -D -');
+    expect(a.prompt).toContain('-o /dev/null');
     expect(a.prompt).toContain('✅ LIVE');
     expect(a.prompt).toContain('❌ DOWN');
   });

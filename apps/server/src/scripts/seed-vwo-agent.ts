@@ -41,16 +41,21 @@ export function buildVwoAgentInput(): AgentInsert {
 }
 
 function main(): void {
-  const config = loadConfig();
-  getDb(config.DATABASE_URL);
-  const input = buildVwoAgentInput();
-  const existing = AgentRepository.findBySlug(slugify(VWO_AGENT_NAME));
-  if (existing) {
-    AgentRepository.update(existing.id, input);
-    console.log(`[seed-vwo-agent] updated existing agent ${existing.id}`);
-  } else {
-    const row = AgentRepository.create(input);
-    console.log(`[seed-vwo-agent] created agent ${row.id}`);
+  try {
+    const config = loadConfig();
+    getDb(config.DATABASE_URL);
+    const input = buildVwoAgentInput();
+    const existing = AgentRepository.findBySlug(slugify(VWO_AGENT_NAME));
+    if (existing) {
+      AgentRepository.update(existing.id, input);
+      console.log(`[seed-vwo-agent] updated existing agent ${existing.id}`);
+    } else {
+      const row = AgentRepository.create(input);
+      console.log(`[seed-vwo-agent] created agent ${row.id}`);
+    }
+  } catch (err) {
+    console.error('[seed-vwo-agent] failed:', err instanceof Error ? err.message : err);
+    process.exit(1);
   }
 }
 
