@@ -91,4 +91,19 @@ describe('createVwoMonitor.start', () => {
     expect(typeof stop).toBe('function');
     stop(); // must not throw
   });
+
+  it('does not throw on an invalid cron expression and returns a callable no-op stop', () => {
+    let errored = false;
+    const log = { info: () => {}, warn: () => {}, error: () => { errored = true; } };
+    const monitor = createVwoMonitor({
+      config: { ...baseConfig, enabled: true, cron: 'not a valid cron' },
+      probe: async () => ok,
+      postCard: async () => {}, log,
+    });
+    let stop: () => void = () => {};
+    expect(() => { stop = monitor.start(); }).not.toThrow();
+    expect(typeof stop).toBe('function');
+    expect(errored).toBe(true);
+    stop();
+  });
 });

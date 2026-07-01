@@ -70,7 +70,16 @@ export function createVwoMonitor(deps: VwoMonitorDeps): {
       deps.log.info({}, '[VwoMonitor] disabled (VWO_MONITOR_ENABLED not set) — not scheduling');
       return () => {};
     }
-    const cron = new Cron(deps.config.cron, () => { void tick(); });
+    let cron: Cron;
+    try {
+      cron = new Cron(deps.config.cron, () => { void tick(); });
+    } catch (e) {
+      deps.log.error(
+        { err: String(e), cron: deps.config.cron },
+        '[VwoMonitor] invalid cron expression — monitor not scheduled',
+      );
+      return () => {};
+    }
     deps.log.info(
       { cron: deps.config.cron, merchants: deps.config.merchants.length },
       '[VwoMonitor] scheduled',
