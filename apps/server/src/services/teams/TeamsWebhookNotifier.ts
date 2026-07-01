@@ -34,20 +34,6 @@ export function buildAgentCard(
   return buildCard(`${isDone ? '✅' : '❌'} ${agentName} — ${isDone ? 'completed' : 'failed'}`, body);
 }
 
-const VWO_CARD_META: Record<'failure' | 'recovery' | 'heartbeat', { icon: string; title: string }> = {
-  failure: { icon: '❌', title: 'VWO Liveness — DOWN' },
-  recovery: { icon: '✅', title: 'VWO Liveness — RECOVERED' },
-  heartbeat: { icon: '✅', title: 'VWO Liveness — healthy' },
-};
-
-export function buildVwoCard(
-  action: 'failure' | 'recovery' | 'heartbeat',
-  lines: string[],
-): object {
-  const meta = VWO_CARD_META[action];
-  return buildCard(`${meta.icon} ${meta.title}`, lines.join('\n'));
-}
-
 export class TeamsWebhookNotifier {
   constructor(private url: string) {}
 
