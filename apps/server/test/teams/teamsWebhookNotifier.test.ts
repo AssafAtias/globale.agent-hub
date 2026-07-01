@@ -109,6 +109,7 @@ describe('buildVwoCard', () => {
     const body = (buildVwoCard('heartbeat', ['line-a', 'line-b']) as any).attachments[0].content.body[1].text;
     expect(body).toContain('line-a');
     expect(body).toContain('line-b');
+    expect(body).toContain('line-a\nline-b');
   });
 });
 
@@ -120,7 +121,6 @@ describe('TeamsWebhookNotifier.postCard', () => {
   it('posts the given card to the URL with the correct Content-Type', async () => {
     let capturedUrl = ''; let capturedInit: any;
     global.fetch = jest.fn(async (url: any, init: any) => { capturedUrl = String(url); capturedInit = init; return { ok: true, status: 202 } as Response; }) as any;
-    const { TeamsWebhookNotifier } = await import('../../src/services/teams/TeamsWebhookNotifier.js');
     const notifier = new TeamsWebhookNotifier('https://hook');
     await notifier.postCard(buildVwoCard('heartbeat', ['ok']));
     expect(capturedUrl).toBe('https://hook');
@@ -129,7 +129,6 @@ describe('TeamsWebhookNotifier.postCard', () => {
 
   it('throws with the status code on a non-ok response', async () => {
     global.fetch = jest.fn(async () => ({ ok: false, status: 429 } as Response)) as any;
-    const { TeamsWebhookNotifier } = await import('../../src/services/teams/TeamsWebhookNotifier.js');
     await expect(new TeamsWebhookNotifier('https://hook').postCard({})).rejects.toThrow('429');
   });
 });
