@@ -79,10 +79,14 @@ agent curl. We gate it behind a new opt-in flag rather than scoping per agent
   superseded by this doc), and the `verify-vwo-shipping-address-validation.sh` harness.
 
 ### 3. Seed the agent record (reproducible)
-- `apps/server/scripts/seed-vwo-agent.ts`: a small idempotent script (upsert by name)
-  that creates the agent via `AgentRepository.create` (or updates if it exists). Run
-  once by the operator: `node dist/scripts/seed-vwo-agent.js` (after tsc). The
+- `apps/server/scripts/seed-vwo-agent.ts`: a small idempotent script that creates the
+  agent via `AgentRepository.create`, or updates it if one with the same `name` already
+  exists. **`AgentRepository` has no `upsert`/`findByName`** — the script achieves
+  idempotency by `findAll()` + filtering on `name` (create if absent, else update).
+  Run once by the operator: `node dist/scripts/seed-vwo-agent.js` (after tsc). The
   canonical prompt lives in this committed script — reviewable, not hand-typed in UI.
+  Factor the record-payload construction into a pure exported `buildVwoAgentInput()`
+  so it is unit-testable without a live DB.
 - Agent record fields:
   - `name`: `VWO Liveness — ShippingAddressValidation`
   - `type`: `pr-review` (the record `type` enum only allows `pr-review`/`ticket-to-code`;
@@ -94,7 +98,10 @@ agent curl. We gate it behind a new opt-in flag rather than scoping per agent
   - `outputs`: `['teams_webhook']`
   - `enabled`: `true`
   - `prompt`: instructs the agent to run
-    `curl -sS -D - -o NUL -H 'Origin: https://extensions.shopifycdn.com' '<ENDPOINT>'`
+    `curl -sS -D - -o /dev/null -H 'Origin: https://extensions.shopifycdn.com' '<ENDPOINT>'`
+    (Claude Code's Bash tool runs through Git Bash on this Windows host, so the POSIX
+    `/dev/null` is correct; the live test confirms the shell — switch to `NUL` only if
+    it turns out to be cmd)
     where ENDPOINT =
     `https://checkout-service-qa-hf.bglobale.com/api/v1/Shopify/field-validations-and-mapping-rules?merchantId=30000603&countryCode=US&cultureCode=en-US`,
     read the `x-vwo-campaigns` response header, and emit EXACTLY ONE final line:
@@ -161,10 +168,14 @@ AGENT_CURL_ENABLED=false   # NEW: default off. When true, ALL agents may run Bas
 - **Blast radius:** when `AGENT_CURL_ENABLED=true`, every agent can run arbitrary
   `curl` (SSRF/exfiltration surface). Mitigation: default off; the flag is the control;
   documented. Per-agent scoping is the eventual correct fix (deferred).
-- **curl on PATH (Windows):** the runner host must have `curl` available to the shell
-  the CLI Bash tool uses. Windows 11 ships `curl.exe`; the live test confirms it. The
-  prompt uses `-o NUL` (Windows null device); the plan notes `/dev/null` if the shell
-  is POSIX.
+- **curl on PATH + null device:** the runner host must have `curl` available to the
+  shell the CLI Bash tool uses. Windows 11 ships `curl.exe`; the live test confirms it.
+  The prompt uses `-o /dev/null` (Git Bash, the expected shell); if the live test shows
+  the Bash tool runs through cmd, switch the prompt to `NUL`.
+- **Startup test removal ordering:** `apps/server/test/vwoMonitor/startup.test.ts`
+  imports `startVwoMonitor`; the native-monitor removal must delete the vwoMonitor test
+  files in the same change that reverts `index.ts`, so the suite never sees a dangling
+  import.
 - **Empty `repos: []` on a scheduled run:** the runner sets cwd from the repo list; the
   plan must verify an empty list is tolerated, else point the agent at a harmless repo.
 - **LLM variance/quota:** a trivial check runs through the shared subscription pool;
