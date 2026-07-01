@@ -1,4 +1,4 @@
-import { buildAgentCard, TeamsWebhookNotifier } from '../../src/services/teams/TeamsWebhookNotifier.js';
+import { buildAgentCard, buildVwoCard, TeamsWebhookNotifier } from '../../src/services/teams/TeamsWebhookNotifier.js';
 
 describe('buildAgentCard', () => {
   it('returns the correct envelope shape', () => {
@@ -84,5 +84,51 @@ describe('TeamsWebhookNotifier.postResult', () => {
 
     const notifier = new TeamsWebhookNotifier('https://example.webhook.com/hook');
     await expect(notifier.postResult('A', 'failed', 'err')).rejects.toThrow('400');
+  });
+});
+
+describe('buildVwoCard', () => {
+  it('failure card uses ❌ and a DOWN title', () => {
+    const card = buildVwoCard('failure', ['merchant 1: FAILED reason=campaign_missing']) as any;
+    const title = card.attachments[0].content.body[0].text;
+    expect(title).toContain('❌');
+    expect(title).toContain('DOWN');
+    expect(card.attachments[0].content.body[1].text).toContain('campaign_missing');
+  });
+  it('recovery card uses ✅ and a RECOVERED title', () => {
+    const title = (buildVwoCard('recovery', ['ok']) as any).attachments[0].content.body[0].text;
+    expect(title).toContain('✅');
+    expect(title).toContain('RECOVERED');
+  });
+  it('heartbeat card uses ✅ and a healthy title', () => {
+    const title = (buildVwoCard('heartbeat', ['ok']) as any).attachments[0].content.body[0].text;
+    expect(title).toContain('✅');
+    expect(title).toMatch(/healthy/i);
+  });
+  it('joins multiple lines into the body', () => {
+    const body = (buildVwoCard('heartbeat', ['line-a', 'line-b']) as any).attachments[0].content.body[1].text;
+    expect(body).toContain('line-a');
+    expect(body).toContain('line-b');
+    expect(body).toContain('line-a\nline-b');
+  });
+});
+
+describe('TeamsWebhookNotifier.postCard', () => {
+  let originalFetch: typeof global.fetch;
+  beforeEach(() => { originalFetch = global.fetch; });
+  afterEach(() => { global.fetch = originalFetch; });
+
+  it('posts the given card to the URL with the correct Content-Type', async () => {
+    let capturedUrl = ''; let capturedInit: any;
+    global.fetch = jest.fn(async (url: any, init: any) => { capturedUrl = String(url); capturedInit = init; return { ok: true, status: 202 } as Response; }) as any;
+    const notifier = new TeamsWebhookNotifier('https://hook');
+    await notifier.postCard(buildVwoCard('heartbeat', ['ok']));
+    expect(capturedUrl).toBe('https://hook');
+    expect((capturedInit.headers as Record<string, string>)['Content-Type']).toBe('application/json; charset=utf-8');
+  });
+
+  it('throws with the status code on a non-ok response', async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, status: 429 } as Response)) as any;
+    await expect(new TeamsWebhookNotifier('https://hook').postCard({})).rejects.toThrow('429');
   });
 });
