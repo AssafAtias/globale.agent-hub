@@ -14,7 +14,9 @@ const PROMPT = `You are a scheduled liveness monitor for the "ShippingAddressVal
 
 Run EXACTLY this command (it prints the response headers, then discards the body):
 
-  curl -sS -D - -o /dev/null -H 'Origin: https://extensions.shopifycdn.com' '${ENDPOINT}'
+  curl -sS -D - -o /dev/null -H 'Origin: https://extensions.shopifycdn.com' -H 'x-client-id: liveness-probe.0.30000603' '${ENDPOINT}'
+
+The \`x-client-id\` header is REQUIRED: VWO assigns a variation by hashing the client id, and with no client id the server returns HTTP 200 but OMITS the \`x-vwo-campaigns\` header entirely (which is NOT a real outage). \`liveness-probe.0.30000603\` is a fixed synthetic probe id; it deterministically lands in one arm (Control or Variation-1) — either arm proves the campaign is live.
 
 Then inspect the response:
 - Read the HTTP status line and the \`x-vwo-campaigns\` response header.
