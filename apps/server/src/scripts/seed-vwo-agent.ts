@@ -1,7 +1,8 @@
+import { config as loadEnv } from 'dotenv';
+import { resolve } from 'path';
 import { AgentRepository, type AgentInsert } from '../services/AgentRepository.js';
 import { slugify } from '../services/teams/slugify.js';
 import { getDb } from '../db/client.js';
-import { loadConfig } from '../config/environment.js';
 
 export const VWO_AGENT_NAME = 'VWO Liveness — ShippingAddressValidation';
 
@@ -42,8 +43,12 @@ export function buildVwoAgentInput(): AgentInsert {
 
 function main(): void {
   try {
-    const config = loadConfig();
-    getDb(config.DATABASE_URL);
+    // Load the repo-root .env (from dist/scripts → repo root) so DATABASE_URL is honored,
+    // then open the same SQLite DB the server uses. We deliberately do NOT call loadConfig()
+    // here — the seed needs only the DB path and should not require unrelated secrets
+    // (e.g. GITLAB_WEBHOOK_SECRET). NOTE: stop the server first, or it may hit SQLITE_BUSY.
+    loadEnv({ path: resolve(__dirname, '../../../../.env') });
+    getDb(process.env.DATABASE_URL ?? './agent-hub.db');
     const input = buildVwoAgentInput();
     const existing = AgentRepository.findBySlug(slugify(VWO_AGENT_NAME));
     if (existing) {
