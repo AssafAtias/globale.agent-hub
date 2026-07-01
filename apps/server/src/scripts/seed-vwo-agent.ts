@@ -1,32 +1,29 @@
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'path';
 import { AgentRepository, type AgentInsert } from '../services/AgentRepository.js';
-import { slugify } from '../services/teams/slugify.js';
 import { getDb } from '../db/client.js';
 
-export const VWO_AGENT_NAME = 'VWO Liveness — ShippingAddressValidation';
+export const VWO_AGENT_NAME = 'VWO Traffic Generator — ShippingAddressValidation';
+const OLD_SLUG = 'vwo-liveness-shippingaddressvalidation';
+const NEW_SLUG = 'vwo-traffic-generator-shippingaddressvalidation';
 
-const ENDPOINT =
-  'https://checkout-service-qa-hf.bglobale.com/api/v1/Shopify/field-validations-and-mapping-rules' +
-  '?merchantId=30000603&countryCode=US&cultureCode=en-US';
+const GENERATE_URL = 'http://localhost:3000/api/dev/vwo-generate-sessions?n=100';
 
-const PROMPT = `You are a scheduled liveness monitor for the "ShippingAddressValidation" VWO A/B campaign on GlobalE checkout.
+const PROMPT = `You are a manual traffic generator for the "ShippingAddressValidation" VWO A/B campaign. When run, you fire 100 checkout sessions via a local helper and report the results.
 
-Run EXACTLY this command (it prints the response headers, then discards the body):
+Run EXACTLY this command:
 
-  curl -sS -D - -o /dev/null -H 'Origin: https://extensions.shopifycdn.com' -H 'x-client-id: liveness-probe.0.30000603' '${ENDPOINT}'
+  curl -sS '${GENERATE_URL}'
 
-The \`x-client-id\` header is REQUIRED: VWO assigns a variation by hashing the client id, and with no client id the server returns HTTP 200 but OMITS the \`x-vwo-campaigns\` header entirely (which is NOT a real outage). \`liveness-probe.0.30000603\` is a fixed synthetic probe id; it deterministically lands in one arm (Control or Variation-1) — either arm proves the campaign is live.
+It returns JSON of the form:
+  { "n": 100, "variation1": <count>, "control": <count>, "none": <count>,
+    "sessions": [ { "clientId": "...", "checkoutId": "...", "variation": "Variation-1" | "Control" | null }, ... ] }
 
-Then inspect the response:
-- Read the HTTP status line and the \`x-vwo-campaigns\` response header.
-- The campaign is LIVE if the status is 200 AND \`x-vwo-campaigns\` is present and contains an entry whose "CampaignKey" is "ShippingAddressValidation" (ANY "Variation" value — Control or Variation-1 — counts as live).
+Then output a report:
+1. A summary line: "<n> calls · <variation1> Variation-1 / <control> Control / <none> none".
+2. Then one line per session: "<clientId>  <checkoutId>  <variation>".
 
-Output EXACTLY ONE final line and nothing else, in one of these forms:
-- \`✅ LIVE — ShippingAddressValidation variation=<Variation>, HTTP 200\`
-- \`❌ DOWN — <reason>\`  where <reason> is one of: "HTTP <code>" (non-200), "x-vwo-campaigns header missing", "campaign not in header", or "curl failed: <short error>".
-
-Do not invent or assume values — report only what the actual response shows. Do not run any other commands.`;
+Report ONLY the actual data from the JSON — do not invent sessions. If the command fails, returns 404 (the tool is disabled), or returns non-JSON, report that verbatim. Do not run any other commands.`;
 
 export function buildVwoAgentInput(): AgentInsert {
   return {
@@ -35,27 +32,25 @@ export function buildVwoAgentInput(): AgentInsert {
     model: 'claude-haiku-4-5',
     prompt: PROMPT,
     repos: '[]',
-    triggerRules: JSON.stringify({ events: [], cron: '0 9 * * *' }),
-    outputs: JSON.stringify(['teams_webhook']),
+    triggerRules: JSON.stringify({ events: [] }), // no cron → manual-only
+    outputs: JSON.stringify([]),                  // Activity-only, no Teams
     enabled: true,
-    title: 'VWO liveness (daily)',
-    bio: 'Daily curl check that the ShippingAddressValidation VWO campaign is still served; posts LIVE/DOWN to the Agent-hub Teams channel.',
+    title: 'VWO traffic generator (manual)',
+    bio: 'Manual run: fires 100 distinct-client-id sessions at the ShippingAddressValidation endpoint and reports the Control/Variation-1 split + generated ids.',
   };
 }
 
 function main(): void {
   try {
-    // Load the repo-root .env (from dist/scripts → repo root) so DATABASE_URL is honored,
-    // then open the same SQLite DB the server uses. We deliberately do NOT call loadConfig()
-    // here — the seed needs only the DB path and should not require unrelated secrets
-    // (e.g. GITLAB_WEBHOOK_SECRET). NOTE: stop the server first, or it may hit SQLITE_BUSY.
     loadEnv({ path: resolve(__dirname, '../../../../.env') });
     getDb(process.env.DATABASE_URL ?? './agent-hub.db');
     const input = buildVwoAgentInput();
-    const existing = AgentRepository.findBySlug(slugify(VWO_AGENT_NAME));
+    // Rename in place: match the new slug, else the old liveness slug. Never leave a duplicate.
+    const existing =
+      AgentRepository.findBySlug(NEW_SLUG) ?? AgentRepository.findBySlug(OLD_SLUG);
     if (existing) {
       AgentRepository.update(existing.id, input);
-      console.log(`[seed-vwo-agent] updated existing agent ${existing.id}`);
+      console.log(`[seed-vwo-agent] updated agent ${existing.id} -> ${VWO_AGENT_NAME}`);
     } else {
       const row = AgentRepository.create(input);
       console.log(`[seed-vwo-agent] created agent ${row.id}`);

@@ -1,30 +1,30 @@
 import { buildVwoAgentInput, VWO_AGENT_NAME } from '../src/scripts/seed-vwo-agent.js';
 
-describe('buildVwoAgentInput', () => {
+describe('buildVwoAgentInput (traffic generator)', () => {
   const a = buildVwoAgentInput();
 
-  it('sets identity + model + type', () => {
+  it('is the renamed generator agent, haiku, manual-only, Activity-only', () => {
+    expect(VWO_AGENT_NAME).toBe('VWO Traffic Generator — ShippingAddressValidation');
     expect(a.name).toBe(VWO_AGENT_NAME);
     expect(a.type).toBe('pr-review');
     expect(a.model).toBe('claude-haiku-4-5');
     expect(a.enabled).toBe(true);
   });
 
-  it('sets a daily cron trigger, empty repos, and teams_webhook output (as JSON strings)', () => {
-    expect(JSON.parse(a.triggerRules)).toEqual({ events: [], cron: '0 9 * * *' });
+  it('has NO cron (manual-only) and empty outputs', () => {
+    const tr = JSON.parse(a.triggerRules);
+    expect(tr).toEqual({ events: [] });
+    expect(tr.cron).toBeUndefined();
+    expect(JSON.parse(a.outputs)).toEqual([]);
     expect(JSON.parse(a.repos)).toEqual([]);
-    expect(JSON.parse(a.outputs)).toEqual(['teams_webhook']);
   });
 
-  it('prompt tells the agent to curl the endpoint and read the x-vwo-campaigns header', () => {
-    expect(a.prompt).toContain('field-validations-and-mapping-rules');
-    expect(a.prompt).toContain('x-vwo-campaigns');
-    expect(a.prompt).toContain('ShippingAddressValidation');
-    expect(a.prompt).toContain('curl -sS -D -');
-    expect(a.prompt).toContain('-o /dev/null');
-    // VWO buckets on x-client-id; without it the server omits x-vwo-campaigns (false DOWN).
-    expect(a.prompt).toContain('x-client-id: liveness-probe.0.30000603');
-    expect(a.prompt).toContain('✅ LIVE');
-    expect(a.prompt).toContain('❌ DOWN');
+  it('prompt curls the local generator endpoint and reports count + split + ids', () => {
+    expect(a.prompt).toContain("curl -sS 'http://localhost:3000/api/dev/vwo-generate-sessions?n=100'");
+    expect(a.prompt).toContain('variation1');
+    expect(a.prompt).toContain('clientId');
+    expect(a.prompt).toContain('checkoutId');
+    expect(a.prompt).toContain('Variation-1');
+    expect(a.prompt).toContain('Control');
   });
 });
