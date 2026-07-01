@@ -38,12 +38,13 @@ async function generateVwoSessions(opts: {
 }, fetchImpl?: typeof fetch, randomInt?: () => number): Promise<GenerateResult>
 ```
 - Builds N distinct client-ids (`<rand>.<rand>.<merchantId>`) and checkout-ids (32-hex), fires the field-validations GET with `Origin` + `x-client-id` + `x-checkout-id`, parses `x-vwo-campaigns` for `campaignKey`, tallies. Runs with a small concurrency pool (default 10) so 100 finishes in a few seconds. `randomInt`/`fetchImpl` injectable for deterministic tests. Never throws per-session — a failed request → `variation: null` (counted as `none`).
-- `extractVariation` is inlined here (the old `probe.ts` was removed with the native monitor).
+- **INVARIANT:** `generateVwoSessions` MUST always return exactly `n` entries in `sessions` (and `variation1 + control + none === n`), regardless of per-session failures. The concurrency pool must not drop or duplicate sessions — index each session by its position `0..n-1`.
+- `extractVariation` is inlined here (the old `probe.ts` was removed with the native monitor). The `x-vwo-campaigns` header is a JSON array of objects, e.g. `[{"CampaignKey":"ShippingAddressValidation","Variation":"Control"}]`; return the `Variation` of the first entry whose `CampaignKey === campaignKey`, else `null` (also `null` on absent/malformed/non-array).
 
 ### 2. Dev route — `apps/server/src/api/routes/devTools.ts`
 `buildDevToolsRoutes(config)` → `FastifyPluginAsyncTypebox`, registered in `app.ts`:
 - `GET /api/dev/vwo-generate-sessions` with TypeBox querystring `{ n?: integer }` (default 100, **clamped to [1, 500]**).
-- If `config.VWO_GENERATE_ENABLED` is false → reply **404** (don't advertise the tool when off).
+- The route is ALWAYS registered; the flag is checked **inside the handler** (not conditional registration). If `config.VWO_GENERATE_ENABLED` is false → reply **404** (don't advertise the tool when off).
 - Else call `generateVwoSessions(...)` with the baked QA-HF params (base `https://checkout-service-qa-hf.bglobale.com`, merchant `30000603`, `US`/`en-US`, campaign `ShippingAddressValidation`) and return the `GenerateResult` JSON.
 
 ### 3. Config — `apps/server/src/config/environment.ts`
@@ -58,7 +59,11 @@ Add `VWO_GENERATE_ENABLED: boolean` to `Environment`, parsed default-off (`['tru
 - `prompt`: instruct the agent to run EXACTLY
   `curl -sS 'http://localhost:3000/api/dev/vwo-generate-sessions?n=100'`
   then parse the JSON and output a report: a header line `<n> calls · <variation1> Variation-1 / <control> Control / <none> none`, followed by one line per session `<clientId>  <checkoutId>  <variation>`. Do not invent data; if the endpoint errors (e.g. 404 = tool disabled), report that verbatim.
-- `main()` still upserts by slug (idempotent) — re-running updates the existing record. (Because the name changes, note in the plan: the OLD record `VWO Liveness — …` won't match the new slug; the plan must delete/rename the old record so we don't end up with two. Simplest: `main()` also removes a stale `VWO Liveness — ShippingAddressValidation` record if present.)
+- **`main()` must rename the existing record in place (no duplicate).** The current live record is named `VWO Liveness — ShippingAddressValidation` (slug `vwo-liveness-shippingaddressvalidation`); the new name `VWO Traffic Generator — ShippingAddressValidation` has slug `vwo-traffic-generator-shippingaddressvalidation`. `main()` MUST:
+  1. `const existing = AgentRepository.findBySlug('vwo-traffic-generator-shippingaddressvalidation') ?? AgentRepository.findBySlug('vwo-liveness-shippingaddressvalidation');`
+  2. if `existing` → `AgentRepository.update(existing.id, buildVwoAgentInput())` (renames it to the generator, updates prompt/trigger/outputs, preserves run history);
+  3. else → `AgentRepository.create(buildVwoAgentInput())`.
+  This is idempotent: a second run finds the record by the NEW slug and updates it. No stale duplicate is ever left.
 
 ## Configuration
 ```
