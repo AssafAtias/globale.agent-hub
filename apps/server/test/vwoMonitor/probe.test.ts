@@ -81,5 +81,17 @@ describe('probeMerchant', () => {
     await probeMerchant(cfg, merchant);
     expect(seenUrl).toBe('https://cs.example.com/api/v1/Shopify/field-validations-and-mapping-rules?merchantId=30000603&countryCode=US&cultureCode=en-US');
     expect(seenInit.headers.Origin).toBe('https://extensions.shopifycdn.com');
+    expect(seenInit.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('aborts via the AbortController timer and maps to timeout', async () => {
+    global.fetch = jest.fn((_url: any, init: any) => new Promise((_resolve, reject) => {
+      const signal = init.signal as AbortSignal;
+      signal.addEventListener('abort', () => {
+        const err = new Error('aborted'); err.name = 'AbortError'; reject(err);
+      });
+    })) as any;
+    const r = await probeMerchant(cfg, merchant, 5);
+    expect(r).toMatchObject({ ok: false, reason: 'timeout' });
   });
 });
