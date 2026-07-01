@@ -87,7 +87,7 @@ VWO_GENERATE_ENABLED=false   # NEW: default off. Enables the /api/dev/vwo-genera
 1. `npx tsc` in `apps/server`.
 2. Set `VWO_GENERATE_ENABLED=true` in root `.env` (AGENT_CURL_ENABLED already on).
 3. **Restart the server** (:3000) from fresh dist — the new route only exists after restart.
-4. Re-run the seed: `node dist/scripts/seed-vwo-agent.js` (renames the agent, removes cron, updates prompt; removes the stale liveness record).
+4. Re-run the seed: `node dist/scripts/seed-vwo-agent.js` (renames the existing liveness record in place → the generator: new name, no cron, new prompt, `outputs:[]`; no duplicate left).
 5. In the Agents screen, hit **RUN** on **VWO Traffic Generator** → Activity shows the curl + the 100-session summary. No DB migration.
 
 ## Risks & tradeoffs
