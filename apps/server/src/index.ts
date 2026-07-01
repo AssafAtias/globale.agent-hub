@@ -4,7 +4,6 @@ import { loadConfig } from './config/environment.js';
 import { buildApp } from './app.js';
 import { getDb } from './db/client.js';
 import { startScheduler } from './services/Scheduler.js';
-import { startVwoMonitor } from './services/monitoring/VwoAbMonitor.js';
 
 // Load the repo-root .env so secrets (GITLAB_API_TOKEN, etc.) live in one file
 // instead of being passed on the command line. Resolved from this compiled
@@ -25,6 +24,5 @@ app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err) => {
     process.exit(1);
   }
   startScheduler();
-  startVwoMonitor(process.env, app.log);
   app.log.info('Scheduler started');
 });
