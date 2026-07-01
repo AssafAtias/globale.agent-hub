@@ -40,4 +40,15 @@ describe('buildToolArgs', () => {
     expect(buildToolArgs({ enabled: true, repoPaths: ['/a'] }).filter((a) => a === '--add-dir')).toHaveLength(0);
     expect(buildToolArgs({ enabled: true, repoPaths: [] }).filter((a) => a === '--add-dir')).toHaveLength(0);
   });
+
+  it('includes Bash(curl:*) only when curlEnabled is true', () => {
+    const on = buildToolArgs({ enabled: true, repoPaths: ['/a'], curlEnabled: true });
+    expect(on).toContain('"Bash(curl:*)"');
+    expect(buildToolArgs({ enabled: true, repoPaths: ['/a'] })).not.toContain('"Bash(curl:*)"');
+    expect(buildToolArgs({ enabled: true, repoPaths: ['/a'], curlEnabled: false })).not.toContain('"Bash(curl:*)"');
+  });
+
+  it('returns [] when disabled even if curlEnabled is true', () => {
+    expect(buildToolArgs({ enabled: false, repoPaths: ['/a'], curlEnabled: true })).toEqual([]);
+  });
 });

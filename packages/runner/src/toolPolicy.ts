@@ -1,6 +1,7 @@
 export interface ToolArgsOptions {
   enabled: boolean;
   repoPaths: string[];
+  curlEnabled?: boolean;
 }
 
 // Read-only built-ins + read-only git subcommands only.
@@ -15,11 +16,14 @@ const DISALLOWED_TOOLS = ['Write', 'Edit', 'NotebookEdit'];
 // double-quoted (the shell strips the quotes before the arg reaches `claude`).
 const q = (s: string): string => `"${s}"`;
 
-export function buildToolArgs({ enabled, repoPaths }: ToolArgsOptions): string[] {
+export function buildToolArgs({ enabled, repoPaths, curlEnabled = false }: ToolArgsOptions): string[] {
   if (!enabled) return [];
+  // curl is gated: only granted when AGENT_CURL_ENABLED is on. When granted it applies
+  // to EVERY agent (the allowlist is global) — a documented trade-off.
+  const allowed = curlEnabled ? [...ALLOWED_TOOLS, 'Bash(curl:*)'] : ALLOWED_TOOLS;
   const args: string[] = [
     '--permission-mode', 'dontAsk',
-    '--allowedTools', ...ALLOWED_TOOLS.map(q),
+    '--allowedTools', ...allowed.map(q),
     '--disallowedTools', ...DISALLOWED_TOOLS.map(q),
   ];
   for (const path of repoPaths.slice(1)) {
