@@ -32,6 +32,7 @@ export type Environment = {
   BITBUCKET_API_TOKEN: string | undefined;
   BITBUCKET_USERNAME: string | undefined;
   BITBUCKET_WEBHOOK_SECRET: string | undefined;
+  VWO_GENERATE_ENABLED: boolean;
 };
 
 export function loadConfig(): Environment {
@@ -56,6 +57,7 @@ export function loadConfig(): Environment {
     BITBUCKET_API_TOKEN: process.env.BITBUCKET_API_TOKEN,
     BITBUCKET_USERNAME: process.env.BITBUCKET_USERNAME,
     BITBUCKET_WEBHOOK_SECRET: process.env.BITBUCKET_WEBHOOK_SECRET,
+    VWO_GENERATE_ENABLED: ['true', '1', 'yes'].includes((process.env.VWO_GENERATE_ENABLED ?? '').trim().toLowerCase()),
   };
 
   return config;
