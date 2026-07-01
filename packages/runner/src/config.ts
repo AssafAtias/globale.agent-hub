@@ -8,6 +8,7 @@ export interface RunnerConfig {
   workflowsDir: string;
   toolsEnabled: boolean;
   runEventsEnabled: boolean;
+  curlEnabled: boolean;
 }
 
 export function loadConfig(): RunnerConfig {
@@ -26,5 +27,6 @@ export function loadConfig(): RunnerConfig {
     workflowsDir: process.env.WORKFLOWS_DIR ?? 'C:/GlobalE/globale.agent-hub/workflows',
     toolsEnabled: !['false', '0', 'no'].includes((process.env.AGENT_TOOLS_ENABLED ?? '').trim().toLowerCase()),
     runEventsEnabled: !['false', '0', 'no'].includes((process.env.RUN_EVENTS_ENABLED ?? '').trim().toLowerCase()),
+    curlEnabled: ['true', '1', 'yes'].includes((process.env.AGENT_CURL_ENABLED ?? '').trim().toLowerCase()),
   };
 }

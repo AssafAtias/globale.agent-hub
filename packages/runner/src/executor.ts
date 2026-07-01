@@ -159,7 +159,8 @@ const GATE_PROTOCOL =
 
 export async function executeJob(
   job: Job, localReposRoot: string, skillsDir: string, workflowsDir: string,
-  memory: MemoryInput, toolsEnabled: boolean, runEventsEnabled: boolean = false, onProgress?: OnProgress,
+  memory: MemoryInput, toolsEnabled: boolean, runEventsEnabled: boolean = false,
+  curlEnabled: boolean = false, onProgress?: OnProgress,
 ): Promise<{ kind: 'gate'; gate: GatePayload; sessionId: string } | { kind: 'final'; result: string; note: string | null; sessionId: string; handoff: HandoffPayload | null }> {
   const enricher = new LocalEnricher(localReposRoot);
   const agentRepos = (() => { try { return JSON.parse(job.agent.repos || '[]') as string[]; } catch { return [] as string[]; } })();
@@ -189,7 +190,7 @@ export async function executeJob(
 
   const repoPaths = resolveRepoPaths(localReposRoot, agentRepos);
   const cwd = toolsEnabled ? (repoPaths[0] ?? localReposRoot) : localReposRoot;
-  const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths });
+  const toolArgs = buildToolArgs({ enabled: toolsEnabled, repoPaths, curlEnabled });
 
   const fresh = !job.run.sessionId;
   const sessionId = job.run.sessionId ?? randomUUID();

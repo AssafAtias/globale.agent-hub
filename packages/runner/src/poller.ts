@@ -68,7 +68,7 @@ export async function startPollLoop(config: RunnerConfig): Promise<never> {
         let seq = 0;
         const onProgress = (e: { kind: string; label: string; detail?: string }) =>
           postEvent(config, job.run.id, { seq: seq++, ...e }).catch(() => { /* best-effort */ });
-        const outcome = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled, config.runEventsEnabled, onProgress);
+        const outcome = await executeJob(job, config.localReposRoot, config.skillsDir, config.workflowsDir, memory, config.toolsEnabled, config.runEventsEnabled, config.curlEnabled, onProgress);
         if (outcome.kind === 'gate') {
           await postResult(config, job.run.id, { gate: outcome.gate, sessionId: outcome.sessionId });
           console.log(`[runner] Run ${job.run.id} paused at gate "${outcome.gate.id}"`);
