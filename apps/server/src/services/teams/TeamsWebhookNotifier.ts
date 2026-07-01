@@ -1,18 +1,11 @@
 const MAX_BODY_LEN = 18_000;
 
-export function buildAgentCard(
-  agentName: string,
-  status: 'done' | 'failed',
-  body: string,
-): object {
-  const isDone = status === 'done';
-  const titleText = `${isDone ? '✅' : '❌'} ${agentName} — ${isDone ? 'completed' : 'failed'}`;
-
+/** Shared Adaptive-Card envelope builder: a bold title block + a wrapping body block. */
+function buildCard(titleText: string, body: string): object {
   let bodyText = body;
   if (bodyText.length > MAX_BODY_LEN) {
     bodyText = bodyText.slice(0, MAX_BODY_LEN) + '\n\n…(truncated)';
   }
-
   return {
     type: 'message',
     attachments: [
@@ -23,17 +16,8 @@ export function buildAgentCard(
           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
           version: '1.4',
           body: [
-            {
-              type: 'TextBlock',
-              weight: 'Bolder',
-              size: 'Medium',
-              text: titleText,
-            },
-            {
-              type: 'TextBlock',
-              wrap: true,
-              text: bodyText,
-            },
+            { type: 'TextBlock', weight: 'Bolder', size: 'Medium', text: titleText },
+            { type: 'TextBlock', wrap: true, text: bodyText },
           ],
         },
       },
@@ -41,24 +25,49 @@ export function buildAgentCard(
   };
 }
 
+export function buildAgentCard(
+  agentName: string,
+  status: 'done' | 'failed',
+  body: string,
+): object {
+  const isDone = status === 'done';
+  return buildCard(`${isDone ? '✅' : '❌'} ${agentName} — ${isDone ? 'completed' : 'failed'}`, body);
+}
+
+const VWO_CARD_META: Record<'failure' | 'recovery' | 'heartbeat', { icon: string; title: string }> = {
+  failure: { icon: '❌', title: 'VWO Liveness — DOWN' },
+  recovery: { icon: '✅', title: 'VWO Liveness — RECOVERED' },
+  heartbeat: { icon: '✅', title: 'VWO Liveness — healthy' },
+};
+
+export function buildVwoCard(
+  action: 'failure' | 'recovery' | 'heartbeat',
+  lines: string[],
+): object {
+  const meta = VWO_CARD_META[action];
+  return buildCard(`${meta.icon} ${meta.title}`, lines.join('\n'));
+}
+
 export class TeamsWebhookNotifier {
   constructor(private url: string) {}
+
+  /** Post a pre-built Adaptive Card. Throws on a non-2xx response. */
+  async postCard(card: object): Promise<void> {
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(card),
+    });
+    if (!res.ok) {
+      throw new Error(`TeamsWebhookNotifier: POST failed with status ${res.status}`);
+    }
+  }
 
   async postResult(
     agentName: string,
     status: 'done' | 'failed',
     body: string,
   ): Promise<void> {
-    const card = buildAgentCard(agentName, status, body);
-    const res = await fetch(this.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify(card),
-    });
-    if (!res.ok) {
-      throw new Error(`TeamsWebhookNotifier: POST failed with status ${res.status}`);
-    }
+    await this.postCard(buildAgentCard(agentName, status, body));
   }
 }
