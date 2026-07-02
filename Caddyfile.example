@@ -1,0 +1,23 @@
+# Caddyfile.example — TLS reverse proxy in front of agent-hub server.
+# Copy to `Caddyfile`, replace agent-hub.internal with your real hostname, run `caddy run`.
+#
+# The agent-hub server listens on plain :3000. TLS MUST terminate here (or in
+# your existing nginx/Traefik) because the session cookie is `Secure` — browsers
+# drop it over plain HTTP and SSO login will silently fail.
+
+agent-hub.internal {
+    reverse_proxy localhost:3000
+
+    # TLS options — pick ONE:
+    #
+    # (a) Public ACME (default): works if the host is publicly resolvable and
+    #     reachable on ports 80+443. Nothing to configure — Caddy auto-issues.
+    #
+    # (b) Internal CA cert (typical for a corporate internal-only host that
+    #     can't reach public ACME): supply your org cert + key.
+    #   tls /etc/agent-hub/tls/cert.pem /etc/agent-hub/tls/key.pem
+    #
+    # (c) Caddy's internal self-signed CA (quick pilot; browsers must trust
+    #     Caddy's local CA, so only convenient on machines that ran caddy):
+    #   tls internal
+}
