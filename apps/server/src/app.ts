@@ -16,6 +16,7 @@ import { createTeamsBot } from './services/teams/TeamsBot.js';
 import { getDb } from './db/client.js';
 import { registerAuth } from './api/plugins/authPlugin.js';
 import { buildAuthRoutes } from './api/routes/auth.js';
+import { buildUsersRoutes } from './api/routes/users.js';
 
 function assertTeamsColumns(): void {
   const db = getDb();
@@ -81,6 +82,7 @@ export async function buildApp(config: Environment) {
     await scope.register(buildSkillsRoutes(config.SKILLS_DIR));
     await scope.register(buildIntegrationsRoutes(config));
     await scope.register(buildDevToolsRoutes(config));
+    await scope.register(buildUsersRoutes());
   });
 
   return app;

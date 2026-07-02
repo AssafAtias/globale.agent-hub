@@ -1,5 +1,6 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import { requireAdmin } from '../plugins/authPlugin.js';
 import { AgentRepository } from '../../services/AgentRepository.js';
 import { AgentMemoryRepository } from '../../services/AgentMemoryRepository.js';
 
@@ -22,6 +23,7 @@ const AgentBody = Type.Object({
   bio: Type.Optional(Type.String({ maxLength: 500 })),
   skills: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   focus: Type.Optional(Type.String({ maxLength: 4000 })),
+  ownerId: Type.Optional(Type.String()),
 });
 
 export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
@@ -34,7 +36,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     AgentRepository.findAll({ includeArchived: req.query.includeArchived ?? false })
   );
 
-  app.post('/api/agents', { schema: { body: AgentBody, response: { 201: Type.Any() } } },
+  app.post('/api/agents', { preHandler: requireAdmin, schema: { body: AgentBody, response: { 201: Type.Any() } } },
     async (req, reply) => {
       const agent = AgentRepository.create({
         ...req.body,
@@ -46,6 +48,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
         bio: req.body.bio ?? null,
         skills: JSON.stringify(req.body.skills ?? []),
         focus: req.body.focus ?? null,
+        ownerId: req.body.ownerId ?? req.user?.id ?? null,
       });
       return reply.status(201).send(agent);
     }
@@ -54,6 +57,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
   // Static route — MUST be declared before '/api/agents/:id' so 'reorder'
   // is not matched as an :id param (mirrors /api/runs/next).
   app.patch('/api/agents/reorder', {
+    preHandler: requireAdmin,
     schema: {
       body: Type.Object({ ids: Type.Array(Type.String()) }),
       response: { 204: Type.Any() },
@@ -64,6 +68,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
   });
 
   app.patch('/api/agents/:id', {
+    preHandler: requireAdmin,
     schema: {
       params: Type.Object({ id: Type.String() }),
       body: Type.Object({ archived: Type.Boolean() }),
@@ -84,6 +89,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
   });
 
   app.put('/api/agents/:id', {
+    preHandler: requireAdmin,
     schema: { params: Type.Object({ id: Type.String() }), body: Type.Partial(AgentBody) },
   }, async (req, reply) => {
     // repos/triggerRules/outputs are stored as JSON text columns, so serialize
@@ -100,6 +106,7 @@ export const agentsRoutes: FastifyPluginAsyncTypebox = async (app) => {
   });
 
   app.delete('/api/agents/:id', {
+    preHandler: requireAdmin,
     schema: { params: Type.Object({ id: Type.String() }) },
   }, async (req, reply) => {
     AgentRepository.delete(req.params.id);
