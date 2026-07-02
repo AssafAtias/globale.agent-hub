@@ -5,6 +5,13 @@ import { getDb, resetDb } from '../src/db/client.js';
 function setupInMemoryDb() {
   const db = getDb(':memory:');
   (db as any).$client.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      entra_object_id TEXT,
+      name TEXT
+    );
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
       model TEXT NOT NULL, prompt TEXT NOT NULL, repos TEXT NOT NULL,
@@ -15,7 +22,7 @@ function setupInMemoryDb() {
       sort_order INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       workflow TEXT,
-      teams_target TEXT
+      teams_target TEXT, owner_id TEXT
     );
     CREATE TABLE IF NOT EXISTS agent_memory (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, run_id TEXT,
@@ -27,7 +34,12 @@ function setupInMemoryDb() {
 }
 
 const config = { ...loadConfig(), DATABASE_URL: ':memory:' };
-const app = buildApp(config);
+
+let app: Awaited<ReturnType<typeof buildApp>>;
+
+beforeAll(async () => {
+  app = await buildApp(config);
+});
 
 beforeEach(() => { resetDb(); setupInMemoryDb(); });
 afterAll(() => resetDb());

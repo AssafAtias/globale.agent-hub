@@ -11,11 +11,16 @@ export const runnersRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
   }, async (req, reply) => {
     const token = randomUUID();
-    const { runner } = RunnerRepository.register(req.body.name, token);
+    // Bind the runner to the creating user so its owner's runs route to it.
+    // In open mode req.user is the bootstrap admin; in auth mode it's the logged-in user.
+    const { runner } = RunnerRepository.register(req.body.name, token, req.user?.id ?? null);
     return reply.status(201).send({ runnerId: runner.id, token });
   });
 
   app.get('/api/runners', { schema: { response: { 200: Type.Array(Type.Any()) } } },
-    async () => RunnerRepository.findAll()
+    async (req) => {
+      const all = RunnerRepository.findAll();
+      return req.user?.role === 'admin' ? all : all.filter(r => r.userId === req.user?.id);
+    }
   );
 };

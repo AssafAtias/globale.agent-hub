@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull, lt } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { runs } from '../db/schema.js';
@@ -9,10 +9,13 @@ export const RunRepository = {
   findAll() {
     return getDb().select().from(runs).orderBy(runs.createdAt).all();
   },
+  findAllForUser(userId: string) {
+    return getDb().select().from(runs).where(eq(runs.userId, userId)).orderBy(runs.createdAt).all();
+  },
   findById(id: string) {
     return getDb().select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
-  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null }): RunRow {
+  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null; userId?: string | null }): RunRow {
     const row: RunRow = {
       id: randomUUID(),
       status: 'pending',
@@ -27,6 +30,7 @@ export const RunRepository = {
       pendingGate: null,
       pendingResponse: null,
       replyTo: null,
+      userId: null,
       ...data,
     };
     getDb().insert(runs).values(row).run();
@@ -40,20 +44,29 @@ export const RunRepository = {
       status: 'done', runnerId: null, result: data.result, error: null,
       startedAt: now, finishedAt: now, archived: false, createdAt: now,
       sessionId: null, pendingGate: null, pendingResponse: null, replyTo: null,
+      userId: null,
     };
     getDb().insert(runs).values(row).run();
     return row;
   },
-  // Atomically claim the next pending run for a runner.
+  // Atomically claim the next pending run for a runner scoped to the runner's user.
   // Uses better-sqlite3's synchronous transaction with BEGIN IMMEDIATE so only
   // one writer can enter at a time — no TOCTOU race between concurrent runners.
-  claimNext(runnerId: string): RunRow | null {
+  claimNext(runnerId: string, runnerUserId: string | null): RunRow | null {
     const startedAt = new Date().toISOString();
     const db = getDb();
     const sqlite = (db as any).$client as import('better-sqlite3').Database;
 
     const claim = sqlite.transaction(() => {
-      const pending = db.select().from(runs).where(eq(runs.status, 'pending')).get();
+      // When the runner has no userId (open-mode / unscoped runner), claim any pending run.
+      // When the runner has a userId, claim only runs owned by that user.
+      const pending = db.select().from(runs)
+        .where(
+          runnerUserId === null
+            ? eq(runs.status, 'pending')
+            : and(eq(runs.status, 'pending'), eq(runs.userId, runnerUserId)),
+        )
+        .get();
       if (!pending) return null;
       const capturedResponse = pending.pendingResponse;
       db.update(runs).set({ status: 'running', runnerId, startedAt, pendingResponse: null })
@@ -103,5 +116,18 @@ export const RunRepository = {
       .orderBy(desc(runs.createdAt))
       .limit(1)
       .get() ?? null;
+  },
+  reapStale(olderThanMs: number, now: Date): number {
+    const cutoff = new Date(now.getTime() - olderThanMs).toISOString();
+    const stale = getDb().select().from(runs)
+      .where(and(eq(runs.status, 'running'), lt(runs.startedAt, cutoff))).all();
+    for (const r of stale) {
+      getDb().update(runs).set({
+        status: 'failed',
+        error: 'Run watchdog: exceeded stale timeout with no result (runner presumed dead).',
+        finishedAt: now.toISOString(),
+      }).where(eq(runs.id, r.id)).run();
+    }
+    return stale.length;
   },
 };

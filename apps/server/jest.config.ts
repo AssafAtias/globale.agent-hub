@@ -6,4 +6,11 @@ export default {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.js$': ['ts-jest', { diagnostics: false }],
+  },
+  transformIgnorePatterns: [
+    'node_modules/(?!(openid-client|oauth4webapi|jose)/)',
+  ],
 };

@@ -10,7 +10,7 @@ function setup() {
       status TEXT NOT NULL DEFAULT 'pending', runner_id TEXT,
       result TEXT, error TEXT, created_at TEXT NOT NULL,
       started_at TEXT, finished_at TEXT, archived INTEGER NOT NULL DEFAULT 0,
-      session_id TEXT, pending_gate TEXT, pending_response TEXT, reply_to TEXT
+      session_id TEXT, pending_gate TEXT, pending_response TEXT, reply_to TEXT, user_id TEXT
     );`);
 }
 
@@ -27,7 +27,7 @@ describe('RunRepository.createCompleted', () => {
 
   it('is not returned by claimNext', () => {
     RunRepository.createCompleted({ agentId: 'a1', trigger: 'manual', result: 'No open tasks found.' });
-    expect(RunRepository.claimNext('runner-1')).toBeNull();
+    expect(RunRepository.claimNext('runner-1', null)).toBeNull();
   });
 });
 
@@ -71,7 +71,7 @@ describe('gate lifecycle', () => {
     const r = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}' });
     RunRepository.pauseForGate(r.id, 'sess-1', '{"id":"g"}');
     RunRepository.resumeWithResponse(r.id, '{"decision":"approve"}');
-    const claimed = RunRepository.claimNext('runner-1')!;
+    const claimed = RunRepository.claimNext('runner-1', null)!;
     expect(claimed.pendingResponse).toContain('approve');
     expect(RunRepository.findById(r.id)!.pendingResponse).toBeNull();
   });

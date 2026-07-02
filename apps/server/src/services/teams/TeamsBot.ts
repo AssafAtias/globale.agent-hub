@@ -3,6 +3,7 @@ import { isAllowedUser } from './allowlist.js';
 import { ActivityHandler, TurnContext } from 'botbuilder';
 import { AgentRepository } from '../AgentRepository.js';
 import { RunRepository } from '../RunRepository.js';
+import { UserRepository } from '../UserRepository.js';
 import { slugify } from './slugify.js';
 
 export interface TeamsTurn {
@@ -15,12 +16,15 @@ export interface TeamsTurn {
 export interface TeamsBotDeps {
   allowedUserIds: string[];
   agents: {
-    findBySlug(slug: string): { id: string; name: string } | null;
+    findBySlug(slug: string): { id: string; name: string; ownerId?: string | null } | null;
     setTeamsTarget(id: string, ref: string): unknown;
     listSlugs(): string[];
   };
   runs: {
-    create(d: { agentId: string; trigger: string; triggerPayload: string; context: string; replyTo: string }): { id: string };
+    create(d: { agentId: string; trigger: string; triggerPayload: string; context: string; replyTo: string; userId?: string | null }): { id: string };
+  };
+  users?: {
+    findByEntraOid(oid: string): { id: string } | null;
   };
 }
 
@@ -58,12 +62,16 @@ export async function processTeamsMessage(turn: TeamsTurn, deps: TeamsBotDeps): 
   const agent = deps.agents.findBySlug(cmd.slug);
   if (!agent) { await safeReply(turn, unknownAgent(cmd.slug, deps.agents.listSlugs())); return; }
 
+  const owner = turn.aadObjectId
+    ? (deps.users?.findByEntraOid(turn.aadObjectId)?.id ?? agent.ownerId ?? null)
+    : (agent.ownerId ?? null);
   deps.runs.create({
     agentId: agent.id,
     trigger: 'teams',
     triggerPayload: JSON.stringify({ source: 'teams', aadObjectId: turn.aadObjectId }),
     context: JSON.stringify({ 'User request': cmd.input }),
     replyTo: turn.conversationReference,
+    userId: owner,
   });
 
   await safeReply(turn, `🚀 Running \`${cmd.slug}\`… I'll post the result here.`);
@@ -88,6 +96,7 @@ export function createTeamsBot(allowedUserIds: string[]): ActivityHandler {
       listSlugs: () => AgentRepository.findAll().map(a => slugify(a.name)),
     },
     runs: { create: (d) => RunRepository.create(d) },
+    users: { findByEntraOid: (oid) => UserRepository.findByEntraOid(oid) },
   };
 
   bot.onMessage(async (context, next) => {

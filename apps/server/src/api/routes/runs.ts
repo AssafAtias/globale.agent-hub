@@ -10,14 +10,15 @@ import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 import { TeamsWebhookNotifier } from '../../services/teams/TeamsWebhookNotifier.js';
 import { planHandoff } from '../../services/handoff.js';
 import { RunEventStore } from '../../services/RunEventStore.js';
+import { ownerForAgent } from '../../services/ownership.js';
+import { requireUser } from '../plugins/authPlugin.js';
 
-export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
+// ---------------------------------------------------------------------------
+// Runner realm: token-authenticated endpoints only.
+// MUST remain reachable WITHOUT a session (no requireUser).
+// ---------------------------------------------------------------------------
+export function buildRunnerRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
-    const teamsWebhook = config.TEAMS_WEBHOOK_URL ? new TeamsWebhookNotifier(config.TEAMS_WEBHOOK_URL) : undefined;
-    app.get('/api/runs', { schema: { response: { 200: Type.Array(Type.Any()) } } },
-      async () => RunRepository.findAll()
-    );
-
     // Long-poll: runner claims next pending job (holds connection up to 30s)
     // MUST be registered before /api/runs/:id to prevent 'next' matching as :id param
     app.get('/api/runs/next', {
@@ -33,7 +34,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
 
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
-        const run = RunRepository.claimNext(runner.id);
+        const run = RunRepository.claimNext(runner.id, runner.userId ?? null);
         if (run) {
           const agent = AgentRepository.findById(run.agentId);
           return { run, agent };
@@ -41,62 +42,6 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
         await new Promise(r => setTimeout(r, 1000));
       }
       return reply.status(204).send();
-    });
-
-    app.get('/api/runs/:id', {
-      schema: {
-        params: Type.Object({ id: Type.String() }),
-        response: { 200: Type.Any(), 404: Type.Any() },
-      },
-    }, async (req, reply) => {
-      const run = RunRepository.findById(req.params.id);
-      if (!run) return reply.status(404).send({ error: 'Not found' });
-      return run;
-    });
-
-    app.patch('/api/runs/:id', {
-      schema: {
-        params: Type.Object({ id: Type.String() }),
-        body: Type.Object({ archived: Type.Boolean() }),
-        response: { 200: Type.Any(), 404: Type.Any() },
-      },
-    }, async (req, reply) => {
-      const updated = RunRepository.setArchived(req.params.id, req.body.archived);
-      if (!updated) return reply.status(404).send({ error: 'Not found' });
-      return updated;
-    });
-
-    // Manual trigger
-    app.post('/api/runs', {
-      schema: {
-        body: Type.Object({ agentId: Type.String() }),
-        response: { 201: Type.Any(), 400: Type.Any(), 404: Type.Any(), 409: Type.Any() },
-      },
-    }, async (req, reply) => {
-      const agent = AgentRepository.findById(req.body.agentId);
-      if (!agent) return reply.status(404).send({ error: 'Agent not found' });
-      if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
-      if (agent.type === 'ticket-to-code') {
-        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL || !config.JIRA_EMAIL) {
-          return reply.status(400).send({ error: 'Jira is not configured; set JIRA_API_TOKEN, JIRA_BASE_URL and JIRA_EMAIL' });
-        }
-        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL, config.BITBUCKET_API_TOKEN, config.BITBUCKET_USERNAME);
-        const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
-        if (!ctx) {
-          return reply.status(201).send(
-            RunRepository.createCompleted({ agentId: agent.id, trigger: 'manual', result: 'No open tasks found.' })
-          );
-        }
-        return reply.status(201).send(RunRepository.create({
-          agentId: agent.id, trigger: 'manual',
-          triggerPayload: JSON.stringify({ issue: { key: ctx.ticket!.key } }),
-          context: fetcher.serializeForRunner(ctx),
-        }));
-      }
-      const run = RunRepository.create({
-        agentId: req.body.agentId, trigger: 'manual', triggerPayload: '{}', context: '{}',
-      });
-      return reply.status(201).send(run);
     });
 
     // Runner posts result back
@@ -116,6 +61,8 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
     }, async (req, reply) => {
       const runner = RunnerRepository.findByToken(req.headers['x-runner-token']);
       if (!runner) return reply.status(401).send({ error: 'Invalid runner token' });
+
+      const teamsWebhook = config.TEAMS_WEBHOOK_URL ? new TeamsWebhookNotifier(config.TEAMS_WEBHOOK_URL) : undefined;
 
       if (req.body.gate) {
         RunRepository.pauseForGate(req.params.id, req.body.sessionId ?? '', JSON.stringify(req.body.gate));
@@ -171,7 +118,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
             else {
               const plan = planHandoff(completedRun, target.id, String(req.body.handoff.message ?? ''));
               if (plan.spawn) {
-                const child = RunRepository.create({ agentId: target.id, trigger: 'handoff', triggerPayload: plan.childTriggerPayload, context: plan.context });
+                const child = RunRepository.create({ agentId: target.id, trigger: 'handoff', triggerPayload: plan.childTriggerPayload, context: plan.context, userId: ownerForAgent(target.id) });
                 app.log.info({ parent: completedRun.id, child: child.id, target: target.id }, 'handoff spawned');
               } else {
                 app.log.warn({ parent: completedRun.id, reason: plan.reason }, 'handoff refused');
@@ -196,12 +143,96 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
       RunEventStore.append(req.params.id, req.body);
       return reply.status(200).send({ ok: true });
     });
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Human realm: session-authenticated endpoints.
+// Each endpoint requires req.user (via requireUser preHandler).
+// ---------------------------------------------------------------------------
+export function buildHumanRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
+  return async (app) => {
+    app.get('/api/runs', { preHandler: requireUser, schema: { response: { 200: Type.Array(Type.Any()) } } },
+      async (req) => req.user!.role === 'admin' ? RunRepository.findAll() : RunRepository.findAllForUser(req.user!.id)
+    );
+
+    app.get('/api/runs/:id', {
+      preHandler: requireUser,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        response: { 200: Type.Any(), 404: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
+      return run;
+    });
+
+    app.patch('/api/runs/:id', {
+      preHandler: requireUser,
+      schema: {
+        params: Type.Object({ id: Type.String() }),
+        body: Type.Object({ archived: Type.Boolean() }),
+        response: { 200: Type.Any(), 404: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
+      const updated = RunRepository.setArchived(req.params.id, req.body.archived);
+      if (!updated) return reply.status(404).send({ error: 'Not found' });
+      return updated;
+    });
+
+    // Manual trigger
+    app.post('/api/runs', {
+      preHandler: requireUser,
+      schema: {
+        body: Type.Object({ agentId: Type.String() }),
+        response: { 201: Type.Any(), 400: Type.Any(), 404: Type.Any(), 409: Type.Any() },
+      },
+    }, async (req, reply) => {
+      const agent = AgentRepository.findById(req.body.agentId);
+      if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+      if (agent.archived) return reply.status(409).send({ error: 'Agent is archived' });
+      if (agent.type === 'ticket-to-code') {
+        if (!config.JIRA_API_TOKEN || !config.JIRA_BASE_URL || !config.JIRA_EMAIL) {
+          return reply.status(400).send({ error: 'Jira is not configured; set JIRA_API_TOKEN, JIRA_BASE_URL and JIRA_EMAIL' });
+        }
+        const fetcher = new ContextFetcher(config.GITLAB_API_TOKEN, config.JIRA_API_TOKEN, config.JIRA_BASE_URL, config.JIRA_EMAIL, config.BITBUCKET_API_TOKEN, config.BITBUCKET_USERNAME);
+        const ctx = await fetcher.fetchOpenAssignedTicket(config.JIRA_PROJECT_KEY);
+        if (!ctx) {
+          return reply.status(201).send(
+            RunRepository.createCompleted({ agentId: agent.id, trigger: 'manual', result: 'No open tasks found.' })
+          );
+        }
+        return reply.status(201).send(RunRepository.create({
+          agentId: agent.id, trigger: 'manual',
+          triggerPayload: JSON.stringify({ issue: { key: ctx.ticket!.key } }),
+          context: fetcher.serializeForRunner(ctx),
+          userId: req.user!.id,
+        }));
+      }
+      const run = RunRepository.create({
+        agentId: req.body.agentId, trigger: 'manual', triggerPayload: '{}', context: '{}',
+        userId: req.user!.id,
+      });
+      return reply.status(201).send(run);
+    });
 
     app.get('/api/runs/:id/events', {
-      schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Array(Type.Any()) } },
-    }, async (req) => RunEventStore.list(req.params.id));
+      preHandler: requireUser,
+      schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Array(Type.Any()), 404: Type.Any() } },
+    }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
+      return RunEventStore.list(req.params.id);
+    });
 
     app.post('/api/runs/:id/respond', {
+      preHandler: requireUser,
       schema: {
         params: Type.Object({ id: Type.String() }),
         body: Type.Object({
@@ -213,6 +244,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
     }, async (req, reply) => {
       const run = RunRepository.findById(req.params.id);
       if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
       if (run.status !== 'waiting_approval') return reply.status(409).send({ error: 'Run is not awaiting approval' });
       if (req.body.decision === 'reject') {
         RunRepository.reject(req.params.id, req.body.message ?? 'Rejected by user');
@@ -222,4 +254,12 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
       return reply.status(200).send({ ok: true });
     });
   };
+}
+
+// ---------------------------------------------------------------------------
+// Backward-compat export — kept so any import that still uses buildRunsRoutes
+// compiles; remove once all callers are updated.
+// ---------------------------------------------------------------------------
+export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
+  return buildHumanRunsRoutes(config, teamsNotifier);
 }

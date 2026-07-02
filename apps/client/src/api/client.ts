@@ -5,6 +5,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'content-type': 'application/json', ...init?.headers },
     ...init,
   });
+  if (res.status === 401) {
+    window.location.href = '/auth/login';
+    throw new Error('Not authenticated');
+  }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -20,12 +24,14 @@ export interface Agent {
   sortOrder: number;
   archived: boolean;
   teamsTarget?: string | null;
+  ownerId?: string | null;
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
   repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string; cron?: string };
   outputs: string[]; enabled?: boolean;
   avatarKey?: string; title?: string; bio?: string; focus?: string; skills?: string[];
+  ownerId?: string;
 }
 export interface MemoryEntry { id: string; runId: string | null; note: string; createdAt: string; }
 export interface AgentMemory { focus: string | null; entries: MemoryEntry[]; }
@@ -44,6 +50,13 @@ export interface SkillSummary { name: string; description: string; }
 export interface TeamsStatus {
   bot: { connected: boolean };
   webhook: { connected: boolean };
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
 }
 
 export interface RunEvent {
@@ -90,5 +103,11 @@ export const api = {
   },
   integrations: {
     teams: () => req<TeamsStatus>('/api/integrations/teams'),
+  },
+  me: () => req<User>('/api/me'),
+  users: {
+    list: () => req<User[]>('/api/users'),
+    setRole: (id: string, role: string) =>
+      req<User>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
   },
 };

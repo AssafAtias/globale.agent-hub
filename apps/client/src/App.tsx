@@ -9,6 +9,7 @@ import { MonitoringDashboard } from './pages/MonitoringDashboard.js';
 import { RunDetailPage } from './pages/RunDetailPage.js';
 import { RunnersPage } from './pages/RunnersPage.js';
 import { AgentProfilePage } from './pages/AgentProfilePage.js';
+import { UsersPage } from './pages/UsersPage.js';
 
 const qc = new QueryClient();
 
@@ -27,6 +28,7 @@ export function App() {
               <Route path="/runs" element={<MonitoringDashboard />} />
               <Route path="/runs/:id" element={<RunDetailPage />} />
               <Route path="/runners" element={<RunnersPage />} />
+              <Route path="/users" element={<UsersPage />} />
             </Routes>
           </Layout>
         </BrowserRouter>

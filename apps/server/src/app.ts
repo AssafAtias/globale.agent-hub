@@ -4,7 +4,7 @@ import type { Environment } from './config/environment.js';
 import { teamsEnabled } from './config/environment.js';
 import { redactUrlToken } from './services/redactUrlToken.js';
 import { agentsRoutes } from './api/routes/agents.js';
-import { buildRunsRoutes } from './api/routes/runs.js';
+import { buildRunnerRunsRoutes, buildHumanRunsRoutes } from './api/routes/runs.js';
 import { runnersRoutes } from './api/routes/runners.js';
 import { buildWebhooksRoutes } from './api/routes/webhooks.js';
 import { buildSkillsRoutes } from './api/routes/skills.js';
@@ -14,6 +14,9 @@ import { buildTeamsRoutes } from './api/routes/teams.js';
 import { createTeamsAdapter, TeamsNotifier } from './services/teams/TeamsNotifier.js';
 import { createTeamsBot } from './services/teams/TeamsBot.js';
 import { getDb } from './db/client.js';
+import { registerAuth } from './api/plugins/authPlugin.js';
+import { buildAuthRoutes } from './api/routes/auth.js';
+import { buildUsersRoutes } from './api/routes/users.js';
 
 function assertTeamsColumns(): void {
   const db = getDb();
@@ -28,7 +31,7 @@ function assertTeamsColumns(): void {
   }
 }
 
-export function buildApp(config: Environment) {
+export async function buildApp(config: Environment) {
   const app = Fastify({
     logger: {
       level: 'info',
@@ -60,13 +63,27 @@ export function buildApp(config: Environment) {
   }
 
   app.get('/health', async () => ({ status: 'ok' }));
-  app.register(agentsRoutes);
-  app.register(buildRunsRoutes(config, teamsNotifier));
-  app.register(runnersRoutes);
+
+  // Runner + webhook realms: token-authenticated, OUTSIDE the session scope.
+  // These MUST remain reachable without a session cookie — runner tokens only.
+  app.register(buildRunnerRunsRoutes(config, teamsNotifier));
   app.register(buildWebhooksRoutes(config));
-  app.register(buildSkillsRoutes(config.SKILLS_DIR));
-  app.register(buildIntegrationsRoutes(config));
-  app.register(buildDevToolsRoutes(config));
+
+  // Human realm: session-authenticated.
+  // registerAuth runs first so request.user is populated for all routes below.
+  // In open mode (AUTH_ENABLED unset), registerAuth attaches bootstrap-admin
+  // so all human routes work without a real login.
+  await app.register(async (scope) => {
+    await registerAuth(scope, config);
+    await scope.register(buildAuthRoutes(config));
+    await scope.register(buildHumanRunsRoutes(config, teamsNotifier));
+    await scope.register(agentsRoutes);
+    await scope.register(runnersRoutes);
+    await scope.register(buildSkillsRoutes(config.SKILLS_DIR));
+    await scope.register(buildIntegrationsRoutes(config));
+    await scope.register(buildDevToolsRoutes(config));
+    await scope.register(buildUsersRoutes());
+  });
 
   return app;
 }

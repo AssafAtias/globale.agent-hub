@@ -7,7 +7,7 @@ afterEach(() => resetDb());
 it('does not register /api/messages when Teams is disabled', async () => {
   const cfg = { ...loadConfig(), MICROSOFT_APP_ID: undefined } as any;
   getDb(':memory:');
-  const app = buildApp(cfg);
+  const app = await buildApp(cfg);
   const res = await app.inject({ method: 'POST', url: '/api/messages', payload: {} });
   expect(res.statusCode).toBe(404);
 });

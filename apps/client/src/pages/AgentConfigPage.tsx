@@ -8,7 +8,7 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Typography from '@mui/material/Typography';
-import { api, type AgentInput } from '../api/client.js';
+import { api, type AgentInput, type User } from '../api/client.js';
 import { PromptEditor } from '../components/PromptEditor.js';
 import { TriggerRulesForm } from '../components/TriggerRulesForm.js';
 import { OutputSelector } from '../components/OutputSelector.js';
@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { SkillsSelector } from '../components/SkillsSelector.js';
 import { dedupeSkills } from '../constants/skills.js';
+import { useAuthStore } from '../store/auth.store.js';
 
 const DEFAULT_RULES = { events: [] as string[], branchFilter: undefined as string | undefined, jiraLabel: undefined as string | undefined };
 
@@ -24,6 +25,8 @@ export function AgentConfigPage() {
   const isNew = id === 'new' || !id;
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const me = useAuthStore(s => s.me);
+  const isAdmin = me?.role === 'admin';
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'pr-review' | 'ticket-to-code'>('pr-review');
@@ -38,9 +41,17 @@ export function AgentConfigPage() {
   const [focus, setFocus] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [teamsTarget, setTeamsTarget] = useState<string | null | undefined>(undefined);
+  const [ownerId, setOwnerId] = useState<string>('');
+  const [users, setUsers] = useState<User[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAdmin) {
+      api.users.list().then(setUsers).catch(() => setUsers([]));
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isNew && id) {
@@ -64,6 +75,7 @@ export function AgentConfigPage() {
         const skillList = (() => { try { return JSON.parse(a.skills || '[]') as string[]; } catch { return [] as string[]; } })();
         setSkills(skillList);
         setTeamsTarget(a.teamsTarget ?? null);
+        setOwnerId(a.ownerId ?? '');
       }).catch(err => {
         if (!controller.signal.aborted) setLoadError(String(err));
       });
@@ -84,6 +96,7 @@ export function AgentConfigPage() {
       bio: bio.trim() || undefined,
       focus: focus.trim() || undefined,
       skills: dedupeSkills(skills),
+      ...(isAdmin && ownerId ? { ownerId } : {}),
     };
     try {
       if (isNew) await api.agents.create(body);
@@ -113,6 +126,17 @@ export function AgentConfigPage() {
           helperText="Injected into every run as the agent's current focus."
         />
         <SkillsSelector value={skills} onChange={setSkills} />
+        {isAdmin && (
+          <FormControl fullWidth>
+            <InputLabel>Owner</InputLabel>
+            <Select value={ownerId} label="Owner" onChange={e => setOwnerId(e.target.value)}>
+              <MenuItem value=""><em>None (unassigned)</em></MenuItem>
+              {users.map(u => (
+                <MenuItem key={u.id} value={u.id}>{u.name} ({u.email})</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <FormControl fullWidth>
           <InputLabel>Type</InputLabel>
           <Select value={type} label="Type" onChange={e => setType(e.target.value as 'pr-review' | 'ticket-to-code')}>
