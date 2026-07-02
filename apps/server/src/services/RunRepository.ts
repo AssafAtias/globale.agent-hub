@@ -58,11 +58,14 @@ export const RunRepository = {
     const sqlite = (db as any).$client as import('better-sqlite3').Database;
 
     const claim = sqlite.transaction(() => {
+      // When the runner has no userId (open-mode / unscoped runner), claim any pending run.
+      // When the runner has a userId, claim only runs owned by that user.
       const pending = db.select().from(runs)
-        .where(and(
-          eq(runs.status, 'pending'),
-          runnerUserId === null ? isNull(runs.userId) : eq(runs.userId, runnerUserId),
-        ))
+        .where(
+          runnerUserId === null
+            ? eq(runs.status, 'pending')
+            : and(eq(runs.status, 'pending'), eq(runs.userId, runnerUserId)),
+        )
         .get();
       if (!pending) return null;
       const capturedResponse = pending.pendingResponse;

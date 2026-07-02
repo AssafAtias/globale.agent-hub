@@ -4,7 +4,7 @@ import type { Environment } from './config/environment.js';
 import { teamsEnabled } from './config/environment.js';
 import { redactUrlToken } from './services/redactUrlToken.js';
 import { agentsRoutes } from './api/routes/agents.js';
-import { buildRunsRoutes } from './api/routes/runs.js';
+import { buildRunnerRunsRoutes, buildHumanRunsRoutes } from './api/routes/runs.js';
 import { runnersRoutes } from './api/routes/runners.js';
 import { buildWebhooksRoutes } from './api/routes/webhooks.js';
 import { buildSkillsRoutes } from './api/routes/skills.js';
@@ -63,21 +63,25 @@ export async function buildApp(config: Environment) {
 
   app.get('/health', async () => ({ status: 'ok' }));
 
-  // Auth: populate request.user and expose /api/me (+ SSO endpoints when AUTH_ENABLED).
-  // Runner (/api/runs/next,/result,/events) and webhook routes stay OUTSIDE this scope
-  // and remain reachable by token only. Task 13 moves the human run endpoints inside.
+  // Runner + webhook realms: token-authenticated, OUTSIDE the session scope.
+  // These MUST remain reachable without a session cookie — runner tokens only.
+  app.register(buildRunnerRunsRoutes(config));
+  app.register(buildWebhooksRoutes(config));
+
+  // Human realm: session-authenticated.
+  // registerAuth runs first so request.user is populated for all routes below.
+  // In open mode (AUTH_ENABLED unset), registerAuth attaches bootstrap-admin
+  // so all human routes work without a real login.
   await app.register(async (scope) => {
     await registerAuth(scope, config);
     await scope.register(buildAuthRoutes(config));
+    await scope.register(buildHumanRunsRoutes(config, teamsNotifier));
+    await scope.register(agentsRoutes);
+    await scope.register(runnersRoutes);
+    await scope.register(buildSkillsRoutes(config.SKILLS_DIR));
+    await scope.register(buildIntegrationsRoutes(config));
+    await scope.register(buildDevToolsRoutes(config));
   });
-
-  app.register(agentsRoutes);
-  app.register(buildRunsRoutes(config, teamsNotifier));
-  app.register(runnersRoutes);
-  app.register(buildWebhooksRoutes(config));
-  app.register(buildSkillsRoutes(config.SKILLS_DIR));
-  app.register(buildIntegrationsRoutes(config));
-  app.register(buildDevToolsRoutes(config));
 
   return app;
 }
