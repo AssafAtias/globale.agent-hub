@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, lt } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { runs } from '../db/schema.js';
@@ -113,5 +113,18 @@ export const RunRepository = {
       .orderBy(desc(runs.createdAt))
       .limit(1)
       .get() ?? null;
+  },
+  reapStale(olderThanMs: number, now: Date): number {
+    const cutoff = new Date(now.getTime() - olderThanMs).toISOString();
+    const stale = getDb().select().from(runs)
+      .where(and(eq(runs.status, 'running'), lt(runs.startedAt, cutoff))).all();
+    for (const r of stale) {
+      getDb().update(runs).set({
+        status: 'failed',
+        error: 'Run watchdog: exceeded stale timeout with no result (runner presumed dead).',
+        finishedAt: now.toISOString(),
+      }).where(eq(runs.id, r.id)).run();
+    }
+    return stale.length;
   },
 };

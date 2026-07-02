@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { getDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import { startScheduler } from './services/Scheduler.js';
+import { startRunReaper } from './services/RunReaper.js';
 
 // Load the repo-root .env so secrets (GITLAB_API_TOKEN, etc.) live in one file
 // instead of being passed on the command line. Resolved from this compiled
@@ -27,4 +28,8 @@ app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err) => {
   }
   startScheduler();
   app.log.info('Scheduler started');
+  if (process.env.NODE_ENV !== 'test') {
+    startRunReaper(60_000, config.RUN_STALE_TIMEOUT_MS);
+    app.log.info('RunReaper started');
+  }
 });
