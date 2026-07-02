@@ -20,6 +20,7 @@ export const agents = sqliteTable('agents', {
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   workflow: text('workflow'),
   teamsTarget: text('teams_target'),
+  ownerId: text('owner_id'),
 });
 
 export const runs = sqliteTable('runs', {
@@ -40,6 +41,7 @@ export const runs = sqliteTable('runs', {
   pendingGate: text('pending_gate'),
   pendingResponse: text('pending_response'),
   replyTo: text('reply_to'),
+  userId: text('user_id'),
 });
 
 export const runners = sqliteTable('runners', {
@@ -48,12 +50,15 @@ export const runners = sqliteTable('runners', {
   tokenHash: text('token_hash').notNull(),
   lastSeen: text('last_seen').notNull(),
   status: text('status').notNull().default('offline'),
+  userId: text('user_id'),
 });
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').notNull(),
   role: text('role').notNull().default('member'),
+  entraObjectId: text('entra_object_id'),
+  name: text('name'),
 });
 
 export const agentMemory = sqliteTable('agent_memory', {

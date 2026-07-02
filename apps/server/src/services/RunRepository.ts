@@ -27,6 +27,7 @@ export const RunRepository = {
       pendingGate: null,
       pendingResponse: null,
       replyTo: null,
+      userId: null,
       ...data,
     };
     getDb().insert(runs).values(row).run();
@@ -40,6 +41,7 @@ export const RunRepository = {
       status: 'done', runnerId: null, result: data.result, error: null,
       startedAt: now, finishedAt: now, archived: false, createdAt: now,
       sessionId: null, pendingGate: null, pendingResponse: null, replyTo: null,
+      userId: null,
     };
     getDb().insert(runs).values(row).run();
     return row;

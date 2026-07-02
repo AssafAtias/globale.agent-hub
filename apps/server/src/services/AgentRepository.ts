@@ -7,7 +7,7 @@ import { slugify } from './teams/slugify.js';
 export type AgentRow = typeof agents.$inferSelect;
 export type AgentInsert = Omit<
   AgentRow,
-  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived' | 'workflow' | 'teamsTarget'
+  'id' | 'createdAt' | 'enabled' | 'avatarKey' | 'title' | 'bio' | 'skills' | 'focus' | 'sortOrder' | 'archived' | 'workflow' | 'teamsTarget' | 'ownerId'
 > & {
   enabled?: boolean;
   avatarKey?: string | null;
@@ -17,6 +17,7 @@ export type AgentInsert = Omit<
   focus?: string | null;
   workflow?: string | null;
   teamsTarget?: string | null;
+  ownerId?: string | null;
 };
 
 export const AgentRepository = {
@@ -49,6 +50,7 @@ export const AgentRepository = {
       focus: data.focus ?? null,
       workflow: data.workflow ?? null,
       teamsTarget: data.teamsTarget ?? null,
+      ownerId: data.ownerId ?? null,
       sortOrder: nextOrder,
       archived: false,
     };

@@ -18,6 +18,7 @@ export const RunnerRepository = {
       tokenHash: hashToken(token),
       lastSeen: new Date().toISOString(),
       status: 'online',
+      userId: null,
     };
     getDb().insert(runners).values(row).run();
     return { runner: row, token };
