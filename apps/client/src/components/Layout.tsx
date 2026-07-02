@@ -9,22 +9,30 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import InsightsIcon from '@mui/icons-material/Insights';
 import DnsIcon from '@mui/icons-material/Dns';
 import HubIcon from '@mui/icons-material/Hub';
+import PeopleIcon from '@mui/icons-material/People';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { colors } from './dashboard/palette.js';
 import { WorkspaceChip } from './WorkspaceChip.js';
 import { SidebarAccount } from './SidebarAccount.js';
 import { TeamsStatus } from './TeamsStatus.js';
+import { useAuthStore } from '../store/auth.store.js';
 
 const DRAWER_WIDTH = 240;
-const NAV = [
+const BASE_NAV = [
   { label: 'Agents', path: '/', icon: <SmartToyIcon fontSize="small" /> },
   { label: 'Activity', path: '/runs', icon: <InsightsIcon fontSize="small" /> },
   { label: 'Runners', path: '/runners', icon: <DnsIcon fontSize="small" /> },
+];
+const ADMIN_NAV = [
+  { label: 'Users', path: '/users', icon: <PeopleIcon fontSize="small" /> },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const me = useAuthStore(s => s.me);
+  const isAdmin = me?.role === 'admin';
+  const NAV = isAdmin ? [...BASE_NAV, ...ADMIN_NAV] : BASE_NAV;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: colors.pageBg }}>

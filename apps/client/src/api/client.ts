@@ -24,12 +24,14 @@ export interface Agent {
   sortOrder: number;
   archived: boolean;
   teamsTarget?: string | null;
+  ownerId?: string | null;
 }
 export interface AgentInput {
   name: string; type: string; model: string; prompt: string;
   repos: string[]; triggerRules: { events: string[]; branchFilter?: string; jiraLabel?: string; cron?: string };
   outputs: string[]; enabled?: boolean;
   avatarKey?: string; title?: string; bio?: string; focus?: string; skills?: string[];
+  ownerId?: string;
 }
 export interface MemoryEntry { id: string; runId: string | null; note: string; createdAt: string; }
 export interface AgentMemory { focus: string | null; entries: MemoryEntry[]; }
@@ -103,4 +105,9 @@ export const api = {
     teams: () => req<TeamsStatus>('/api/integrations/teams'),
   },
   me: () => req<User>('/api/me'),
+  users: {
+    list: () => req<User[]>('/api/users'),
+    setRole: (id: string, role: string) =>
+      req<User>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  },
 };
