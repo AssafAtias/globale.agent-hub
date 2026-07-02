@@ -1,0 +1,25 @@
+# compose.yaml — agent-hub server (Podman / Docker Compose v2)
+# Runners stay on each developer's machine; only the server is containerised.
+services:
+  agent-hub-server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      DATABASE_URL: "/data/agent-hub.db"
+      AUTH_ENABLED: "${AUTH_ENABLED:-false}"
+      ENTRA_TENANT_ID: "${ENTRA_TENANT_ID:-}"
+      ENTRA_CLIENT_ID: "${ENTRA_CLIENT_ID:-}"
+      ENTRA_CLIENT_SECRET: "${ENTRA_CLIENT_SECRET:-}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-}"
+      GITLAB_WEBHOOK_SECRET: "${GITLAB_WEBHOOK_SECRET:-dev-placeholder}"
+    volumes:
+      - agent-hub-data:/data
+    restart: unless-stopped
+
+volumes:
+  agent-hub-data:
