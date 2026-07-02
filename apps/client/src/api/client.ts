@@ -5,6 +5,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'content-type': 'application/json', ...init?.headers },
     ...init,
   });
+  if (res.status === 401) {
+    window.location.href = '/auth/login';
+    throw new Error('Not authenticated');
+  }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -44,6 +48,13 @@ export interface SkillSummary { name: string; description: string; }
 export interface TeamsStatus {
   bot: { connected: boolean };
   webhook: { connected: boolean };
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
 }
 
 export interface RunEvent {
@@ -91,4 +102,5 @@ export const api = {
   integrations: {
     teams: () => req<TeamsStatus>('/api/integrations/teams'),
   },
+  me: () => req<User>('/api/me'),
 };
