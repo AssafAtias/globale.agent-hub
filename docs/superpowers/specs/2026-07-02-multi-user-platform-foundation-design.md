@@ -155,6 +155,11 @@ migrations use.
   - Manual (dashboard, `POST /api/runs`) → `userId` = logged-in user.
   - Webhook (`webhooks.ts`, 3 sites), cron (`Scheduler.ts`), handoff
     (`runs.ts` handoff branch) → `userId` = the triggering agent's `ownerId`.
+  - Teams (`TeamsBot.ts` `create`, `trigger:'teams'`) → resolve the turn's
+    `aadObjectId` (the Entra `oid`, already captured at `TeamsBot.ts:64`) to a
+    `users.id` via `entraObjectId`; if the Teams user isn't a known user, fall
+    back to the agent's `ownerId`. This keeps the "no null-owner strand"
+    invariant complete even when `teamsEnabled` and `AUTH_ENABLED` are both on.
 - Because `agents.ownerId` is required and every non-manual site resolves it,
   non-manual runs always have a claimable owner — no null-owner strand. The same
   shared agent can legitimately produce runs owned by different users (a member
