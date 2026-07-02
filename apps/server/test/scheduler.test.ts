@@ -10,13 +10,13 @@ function setup() {
       prompt TEXT NOT NULL, repos TEXT NOT NULL, trigger_rules TEXT NOT NULL, outputs TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, avatar_key TEXT, title TEXT, bio TEXT,
       skills TEXT NOT NULL DEFAULT '[]', focus TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
-      archived INTEGER NOT NULL DEFAULT 0, workflow TEXT, teams_target TEXT
+      archived INTEGER NOT NULL DEFAULT 0, workflow TEXT, teams_target TEXT, owner_id TEXT
     );
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, trigger TEXT NOT NULL, trigger_payload TEXT NOT NULL,
       context TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'pending', runner_id TEXT,
       result TEXT, error TEXT, created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
-      archived INTEGER NOT NULL DEFAULT 0, session_id TEXT, pending_gate TEXT, pending_response TEXT, reply_to TEXT
+      archived INTEGER NOT NULL DEFAULT 0, session_id TEXT, pending_gate TEXT, pending_response TEXT, reply_to TEXT, user_id TEXT
     );
   `);
   return c;

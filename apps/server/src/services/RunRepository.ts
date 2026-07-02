@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { runs } from '../db/schema.js';
@@ -59,7 +59,10 @@ export const RunRepository = {
 
     const claim = sqlite.transaction(() => {
       const pending = db.select().from(runs)
-        .where(and(eq(runs.status, 'pending'), eq(runs.userId, runnerUserId as any)))
+        .where(and(
+          eq(runs.status, 'pending'),
+          runnerUserId === null ? isNull(runs.userId) : eq(runs.userId, runnerUserId),
+        ))
         .get();
       if (!pending) return null;
       const capturedResponse = pending.pendingResponse;

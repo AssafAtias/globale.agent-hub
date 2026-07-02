@@ -17,7 +17,7 @@ function setupInMemoryDb() {
       sort_order INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       workflow TEXT,
-      teams_target TEXT
+      teams_target TEXT, owner_id TEXT
     )
   `);
   return db;

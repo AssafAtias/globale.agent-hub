@@ -5,6 +5,13 @@ import { getDb, resetDb } from '../src/db/client.js';
 function setupInMemoryDb() {
   const db = getDb(':memory:');
   (db as any).$client.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      entra_object_id TEXT,
+      name TEXT
+    );
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -24,7 +31,37 @@ function setupInMemoryDb() {
       sort_order INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       workflow TEXT,
-      teams_target TEXT
+      teams_target TEXT,
+      owner_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS runs (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      trigger TEXT NOT NULL,
+      trigger_payload TEXT NOT NULL,
+      context TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      runner_id TEXT,
+      result TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT,
+      archived INTEGER NOT NULL DEFAULT 0,
+      session_id TEXT,
+      pending_gate TEXT,
+      pending_response TEXT,
+      reply_to TEXT,
+      user_id TEXT,
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    );
+    CREATE TABLE IF NOT EXISTS runners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'offline',
+      user_id TEXT
     )
   `);
   return db;
