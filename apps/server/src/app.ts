@@ -65,7 +65,7 @@ export async function buildApp(config: Environment) {
 
   // Runner + webhook realms: token-authenticated, OUTSIDE the session scope.
   // These MUST remain reachable without a session cookie — runner tokens only.
-  app.register(buildRunnerRunsRoutes(config));
+  app.register(buildRunnerRunsRoutes(config, teamsNotifier));
   app.register(buildWebhooksRoutes(config));
 
   // Human realm: session-authenticated.

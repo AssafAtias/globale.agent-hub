@@ -17,7 +17,7 @@ import { requireUser } from '../plugins/authPlugin.js';
 // Runner realm: token-authenticated endpoints only.
 // MUST remain reachable WITHOUT a session (no requireUser).
 // ---------------------------------------------------------------------------
-export function buildRunnerRunsRoutes(config: Environment): FastifyPluginAsyncTypebox {
+export function buildRunnerRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
     // Long-poll: runner claims next pending job (holds connection up to 30s)
     // MUST be registered before /api/runs/:id to prevent 'next' matching as :id param
@@ -73,6 +73,16 @@ export function buildRunnerRunsRoutes(config: Environment): FastifyPluginAsyncTy
         RunRepository.fail(req.params.id, req.body.error, req.body.sessionId);
         const failedRun = RunRepository.findById(req.params.id);
         const failAgent = failedRun ? AgentRepository.findById(failedRun.agentId) : null;
+        if (teamsNotifier && failedRun?.replyTo) {
+          try {
+            await teamsNotifier.post(
+              JSON.parse(failedRun.replyTo),
+              `**${failAgent?.name ?? 'Agent'}** failed: ${req.body.error}`,
+            );
+          } catch (e) {
+            app.log.error(e, 'Teams failure-notify error');
+          }
+        }
         if (teamsWebhook) {
           const failOutputs = (() => { try { return JSON.parse(failAgent?.outputs || '[]') as string[]; } catch { return [] as string[]; } })();
           if (failAgent && failOutputs.includes('teams_webhook')) {
@@ -92,7 +102,7 @@ export function buildRunnerRunsRoutes(config: Environment): FastifyPluginAsyncTy
             config.JIRA_API_TOKEN,
             config.JIRA_BASE_URL,
             config.JIRA_EMAIL,
-            undefined, // teamsNotifier not available in runner realm
+            teamsNotifier,
             teamsWebhook,
             config.BITBUCKET_API_TOKEN,
             config.BITBUCKET_USERNAME,
