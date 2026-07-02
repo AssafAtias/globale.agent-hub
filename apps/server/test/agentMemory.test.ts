@@ -34,7 +34,12 @@ function setupInMemoryDb() {
 }
 
 const config = { ...loadConfig(), DATABASE_URL: ':memory:' };
-const app = buildApp(config);
+
+let app: Awaited<ReturnType<typeof buildApp>>;
+
+beforeAll(async () => {
+  app = await buildApp(config);
+});
 
 beforeEach(() => { resetDb(); setupInMemoryDb(); });
 afterAll(() => resetDb());

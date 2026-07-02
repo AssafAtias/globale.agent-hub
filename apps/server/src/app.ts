@@ -14,6 +14,8 @@ import { buildTeamsRoutes } from './api/routes/teams.js';
 import { createTeamsAdapter, TeamsNotifier } from './services/teams/TeamsNotifier.js';
 import { createTeamsBot } from './services/teams/TeamsBot.js';
 import { getDb } from './db/client.js';
+import { registerAuth } from './api/plugins/authPlugin.js';
+import { buildAuthRoutes } from './api/routes/auth.js';
 
 function assertTeamsColumns(): void {
   const db = getDb();
@@ -28,7 +30,7 @@ function assertTeamsColumns(): void {
   }
 }
 
-export function buildApp(config: Environment) {
+export async function buildApp(config: Environment) {
   const app = Fastify({
     logger: {
       level: 'info',
@@ -60,6 +62,15 @@ export function buildApp(config: Environment) {
   }
 
   app.get('/health', async () => ({ status: 'ok' }));
+
+  // Auth: populate request.user and expose /api/me (+ SSO endpoints when AUTH_ENABLED).
+  // Runner (/api/runs/next,/result,/events) and webhook routes stay OUTSIDE this scope
+  // and remain reachable by token only. Task 13 moves the human run endpoints inside.
+  await app.register(async (scope) => {
+    await registerAuth(scope, config);
+    await scope.register(buildAuthRoutes(config));
+  });
+
   app.register(agentsRoutes);
   app.register(buildRunsRoutes(config, teamsNotifier));
   app.register(runnersRoutes);

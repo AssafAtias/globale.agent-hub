@@ -71,6 +71,12 @@ function setupInMemoryDb() {
 // but the DB singleton is reset between tests via resetDb()
 const config = { ...loadConfig(), DATABASE_URL: ':memory:' };
 
+let app: Awaited<ReturnType<typeof buildApp>>;
+
+beforeAll(async () => {
+  app = await buildApp(config);
+});
+
 beforeEach(() => {
   resetDb();
   setupInMemoryDb();
@@ -79,8 +85,6 @@ beforeEach(() => {
 afterAll(() => {
   resetDb();
 });
-
-const app = buildApp(config);
 
 describe('Agents API', () => {
   it('POST /api/agents creates an agent', async () => {

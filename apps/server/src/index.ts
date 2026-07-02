@@ -19,17 +19,20 @@ const config = loadConfig();
 // (0000–0006 applied by hand, no __drizzle_migrations table) it seeds a
 // baseline row so only the new migrations (0007+) are replayed.
 runMigrations(config.DATABASE_URL);
-const app = buildApp(config);
-
-app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err) => {
-  if (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
-  startScheduler();
-  app.log.info('Scheduler started');
-  if (process.env.NODE_ENV !== 'test') {
-    startRunReaper(60_000, config.RUN_STALE_TIMEOUT_MS);
-    app.log.info('RunReaper started');
-  }
+buildApp(config).then((app) => {
+  app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err) => {
+    if (err) {
+      app.log.error(err);
+      process.exit(1);
+    }
+    startScheduler();
+    app.log.info('Scheduler started');
+    if (process.env.NODE_ENV !== 'test') {
+      startRunReaper(60_000, config.RUN_STALE_TIMEOUT_MS);
+      app.log.info('RunReaper started');
+    }
+  });
+}).catch((err) => {
+  console.error('Failed to build app', err);
+  process.exit(1);
 });
