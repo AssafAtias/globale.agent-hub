@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { loadConfig } from './config/environment.js';
 import { buildApp } from './app.js';
 import { getDb } from './db/client.js';
+import { runMigrations } from './db/migrate.js';
 import { startScheduler } from './services/Scheduler.js';
 
 // Load the repo-root .env so secrets (GITLAB_API_TOKEN, etc.) live in one file
@@ -11,11 +12,12 @@ import { startScheduler } from './services/Scheduler.js';
 loadEnv({ path: resolve(__dirname, '../../../.env') });
 
 const config = loadConfig();
-// Initialize the DB singleton with the configured path BEFORE anything else
-// (buildApp/repositories) calls getDb() with the default. Without this, the
-// documented DATABASE_URL env var is ignored and the server always opens
-// ./agent-hub.db.
-getDb(config.DATABASE_URL);
+// Run migrations BEFORE buildApp/repositories touch the DB.
+// runMigrations initialises the DB singleton (via getDb) and applies any
+// pending Drizzle migrations (journal-aware, idempotent). On a legacy DB
+// (0000–0006 applied by hand, no __drizzle_migrations table) it seeds a
+// baseline row so only the new migrations (0007+) are replayed.
+runMigrations(config.DATABASE_URL);
 const app = buildApp(config);
 
 app.listen({ port: Number(config.PORT), host: '0.0.0.0' }, (err) => {
