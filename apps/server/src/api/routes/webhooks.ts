@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
 import { parseGitLabEvent, parseJiraEvent, parseBitbucketEvent, matchAgents } from '../../services/WebhookMatcher.js';
 import { RunRepository } from '../../services/RunRepository.js';
 import { ContextFetcher } from '../../services/ContextFetcher.js';
+import { ownerForAgent } from '../../services/ownership.js';
 import type { Environment } from '../../config/environment.js';
 
 export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncTypebox {
@@ -49,6 +50,7 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
           trigger: 'webhook',
           triggerPayload: JSON.stringify(req.body),
           context: contextStr,
+          userId: ownerForAgent(agent.id),
         })
       );
 
@@ -82,6 +84,7 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
           trigger: 'webhook',
           triggerPayload: JSON.stringify(req.body),
           context: contextStr,
+          userId: ownerForAgent(agent.id),
         })
       );
       return reply.status(200).send({ created: createdRuns.length });
@@ -115,6 +118,7 @@ export function buildWebhooksRoutes(config: Environment): FastifyPluginAsyncType
           trigger: 'webhook',
           triggerPayload: JSON.stringify(req.body),
           context: contextStr,
+          userId: ownerForAgent(agent.id),
         })
       );
       app.log.info({ runIds: createdRuns.map(r => r.id) }, 'Created runs from Bitbucket webhook');

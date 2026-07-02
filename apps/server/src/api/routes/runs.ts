@@ -10,6 +10,7 @@ import type { TeamsNotifier } from '../../services/teams/TeamsNotifier.js';
 import { TeamsWebhookNotifier } from '../../services/teams/TeamsWebhookNotifier.js';
 import { planHandoff } from '../../services/handoff.js';
 import { RunEventStore } from '../../services/RunEventStore.js';
+import { ownerForAgent } from '../../services/ownership.js';
 
 export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifier): FastifyPluginAsyncTypebox {
   return async (app) => {
@@ -171,7 +172,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
             else {
               const plan = planHandoff(completedRun, target.id, String(req.body.handoff.message ?? ''));
               if (plan.spawn) {
-                const child = RunRepository.create({ agentId: target.id, trigger: 'handoff', triggerPayload: plan.childTriggerPayload, context: plan.context });
+                const child = RunRepository.create({ agentId: target.id, trigger: 'handoff', triggerPayload: plan.childTriggerPayload, context: plan.context, userId: ownerForAgent(target.id) });
                 app.log.info({ parent: completedRun.id, child: child.id, target: target.id }, 'handoff spawned');
               } else {
                 app.log.warn({ parent: completedRun.id, reason: plan.reason }, 'handoff refused');

@@ -16,6 +16,7 @@ export function runDueAgents(now: Date): void {
           trigger: 'schedule',
           triggerPayload: '{}',
           context: buildScheduledContext(agent.repos),
+          userId: agent.ownerId ?? null,
         });
       }
     } catch (e) {
