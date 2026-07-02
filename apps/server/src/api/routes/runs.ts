@@ -33,7 +33,7 @@ export function buildRunsRoutes(config: Environment, teamsNotifier?: TeamsNotifi
 
       const deadline = Date.now() + 30_000;
       while (Date.now() < deadline) {
-        const run = RunRepository.claimNext(runner.id);
+        const run = RunRepository.claimNext(runner.id, runner.userId ?? null);
         if (run) {
           const agent = AgentRepository.findById(run.agentId);
           return { run, agent };

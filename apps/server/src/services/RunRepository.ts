@@ -9,6 +9,9 @@ export const RunRepository = {
   findAll() {
     return getDb().select().from(runs).orderBy(runs.createdAt).all();
   },
+  findAllForUser(userId: string) {
+    return getDb().select().from(runs).where(eq(runs.userId, userId)).orderBy(runs.createdAt).all();
+  },
   findById(id: string) {
     return getDb().select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
@@ -46,16 +49,18 @@ export const RunRepository = {
     getDb().insert(runs).values(row).run();
     return row;
   },
-  // Atomically claim the next pending run for a runner.
+  // Atomically claim the next pending run for a runner scoped to the runner's user.
   // Uses better-sqlite3's synchronous transaction with BEGIN IMMEDIATE so only
   // one writer can enter at a time — no TOCTOU race between concurrent runners.
-  claimNext(runnerId: string): RunRow | null {
+  claimNext(runnerId: string, runnerUserId: string | null): RunRow | null {
     const startedAt = new Date().toISOString();
     const db = getDb();
     const sqlite = (db as any).$client as import('better-sqlite3').Database;
 
     const claim = sqlite.transaction(() => {
-      const pending = db.select().from(runs).where(eq(runs.status, 'pending')).get();
+      const pending = db.select().from(runs)
+        .where(and(eq(runs.status, 'pending'), eq(runs.userId, runnerUserId as any)))
+        .get();
       if (!pending) return null;
       const capturedResponse = pending.pendingResponse;
       db.update(runs).set({ status: 'running', runnerId, startedAt, pendingResponse: null })
