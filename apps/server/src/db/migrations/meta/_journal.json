@@ -43,6 +43,20 @@
       "when": 1782668591490,
       "tag": "0005_exotic_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782750000000,
+      "tag": "0006_teams_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782836400000,
+      "tag": "0007_multiuser",
+      "breakpoints": true
     }
   ]
 }
