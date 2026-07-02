@@ -33,6 +33,13 @@ export type Environment = {
   BITBUCKET_USERNAME: string | undefined;
   BITBUCKET_WEBHOOK_SECRET: string | undefined;
   VWO_GENERATE_ENABLED: boolean;
+  AUTH_ENABLED: boolean;
+  ENTRA_TENANT_ID: string | undefined;
+  ENTRA_CLIENT_ID: string | undefined;
+  ENTRA_CLIENT_SECRET: string | undefined;
+  SESSION_SECRET: string | undefined;
+  PUBLIC_BASE_URL: string | undefined;
+  RUN_STALE_TIMEOUT_MS: number;
 };
 
 export function loadConfig(): Environment {
@@ -58,6 +65,13 @@ export function loadConfig(): Environment {
     BITBUCKET_USERNAME: process.env.BITBUCKET_USERNAME,
     BITBUCKET_WEBHOOK_SECRET: process.env.BITBUCKET_WEBHOOK_SECRET,
     VWO_GENERATE_ENABLED: ['true', '1', 'yes'].includes((process.env.VWO_GENERATE_ENABLED ?? '').trim().toLowerCase()),
+    AUTH_ENABLED: ['true', '1', 'yes'].includes((process.env.AUTH_ENABLED ?? '').trim().toLowerCase()),
+    ENTRA_TENANT_ID: process.env.ENTRA_TENANT_ID,
+    ENTRA_CLIENT_ID: process.env.ENTRA_CLIENT_ID,
+    ENTRA_CLIENT_SECRET: process.env.ENTRA_CLIENT_SECRET,
+    SESSION_SECRET: process.env.SESSION_SECRET,
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
+    RUN_STALE_TIMEOUT_MS: Number(process.env.RUN_STALE_TIMEOUT_MS ?? 780000),
   };
 
   return config;
@@ -65,4 +79,8 @@ export function loadConfig(): Environment {
 
 export function teamsEnabled(config: Environment): boolean {
   return Boolean(config.MICROSOFT_APP_ID);
+}
+
+export function authEnabled(config: Environment): boolean {
+  return config.AUTH_ENABLED;
 }
