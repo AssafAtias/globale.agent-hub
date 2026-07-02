@@ -43,3 +43,101 @@ describe('GET /api/runs visibility', () => {
     await admin.close();
   });
 });
+
+describe('Run sub-resource ownership enforcement', () => {
+  let ownerRunId: string;
+  let otherRunId: string;
+
+  beforeEach(() => {
+    resetDb();
+    setup();
+    const ownerRun = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}', userId: 'u1' });
+    ownerRunId = ownerRun.id;
+    const otherRun = RunRepository.create({ agentId: 'a', trigger: 'manual', triggerPayload: '{}', context: '{}', userId: 'u2' });
+    otherRunId = otherRun.id;
+  });
+  afterAll(() => resetDb());
+
+  describe('PATCH /api/runs/:id (archive)', () => {
+    it('member gets 404 for a run owned by another user', async () => {
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({ method: 'PATCH', url: `/api/runs/${otherRunId}`, payload: { archived: true } });
+      expect(res.statusCode).toBe(404);
+      await app.close();
+    });
+
+    it('owner does NOT get the ownership-404', async () => {
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({ method: 'PATCH', url: `/api/runs/${ownerRunId}`, payload: { archived: true } });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    });
+
+    it('admin does NOT get the ownership-404', async () => {
+      const app = await appAs({ id: 'admin', role: 'admin' });
+      const res = await app.inject({ method: 'PATCH', url: `/api/runs/${otherRunId}`, payload: { archived: true } });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    });
+  });
+
+  describe('GET /api/runs/:id/events', () => {
+    it('member gets 404 for events of a run owned by another user', async () => {
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({ method: 'GET', url: `/api/runs/${otherRunId}/events` });
+      expect(res.statusCode).toBe(404);
+      await app.close();
+    });
+
+    it('owner does NOT get the ownership-404 for events', async () => {
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({ method: 'GET', url: `/api/runs/${ownerRunId}/events` });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    });
+
+    it('admin does NOT get the ownership-404 for events', async () => {
+      const app = await appAs({ id: 'admin', role: 'admin' });
+      const res = await app.inject({ method: 'GET', url: `/api/runs/${otherRunId}/events` });
+      expect(res.statusCode).toBe(200);
+      await app.close();
+    });
+  });
+
+  describe('POST /api/runs/:id/respond', () => {
+    it('member gets 404 for respond on a run owned by another user', async () => {
+      // Set the other user's run to waiting_approval so the ownership check is reached
+      RunRepository.pauseForGate(otherRunId, 'sess', JSON.stringify({ type: 'approval', message: 'ok?' }));
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({
+        method: 'POST', url: `/api/runs/${otherRunId}/respond`,
+        payload: { decision: 'approve' },
+      });
+      expect(res.statusCode).toBe(404);
+      await app.close();
+    });
+
+    it('owner does NOT get the ownership-404 for respond', async () => {
+      RunRepository.pauseForGate(ownerRunId, 'sess', JSON.stringify({ type: 'approval', message: 'ok?' }));
+      const app = await appAs({ id: 'u1', role: 'member' });
+      const res = await app.inject({
+        method: 'POST', url: `/api/runs/${ownerRunId}/respond`,
+        payload: { decision: 'approve' },
+      });
+      // 409 = "not awaiting approval" shape-wise — but NOT 404 means ownership passed
+      expect(res.statusCode).not.toBe(404);
+      await app.close();
+    });
+
+    it('admin does NOT get the ownership-404 for respond', async () => {
+      RunRepository.pauseForGate(otherRunId, 'sess', JSON.stringify({ type: 'approval', message: 'ok?' }));
+      const app = await appAs({ id: 'admin', role: 'admin' });
+      const res = await app.inject({
+        method: 'POST', url: `/api/runs/${otherRunId}/respond`,
+        payload: { decision: 'approve' },
+      });
+      expect(res.statusCode).not.toBe(404);
+      await app.close();
+    });
+  });
+});

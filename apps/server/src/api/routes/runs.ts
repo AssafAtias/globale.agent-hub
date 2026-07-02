@@ -177,6 +177,9 @@ export function buildHumanRunsRoutes(config: Environment, teamsNotifier?: TeamsN
         response: { 200: Type.Any(), 404: Type.Any() },
       },
     }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
       const updated = RunRepository.setArchived(req.params.id, req.body.archived);
       if (!updated) return reply.status(404).send({ error: 'Not found' });
       return updated;
@@ -220,8 +223,13 @@ export function buildHumanRunsRoutes(config: Environment, teamsNotifier?: TeamsN
 
     app.get('/api/runs/:id/events', {
       preHandler: requireUser,
-      schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Array(Type.Any()) } },
-    }, async (req) => RunEventStore.list(req.params.id));
+      schema: { params: Type.Object({ id: Type.String() }), response: { 200: Type.Array(Type.Any()), 404: Type.Any() } },
+    }, async (req, reply) => {
+      const run = RunRepository.findById(req.params.id);
+      if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
+      return RunEventStore.list(req.params.id);
+    });
 
     app.post('/api/runs/:id/respond', {
       preHandler: requireUser,
@@ -236,6 +244,7 @@ export function buildHumanRunsRoutes(config: Environment, teamsNotifier?: TeamsN
     }, async (req, reply) => {
       const run = RunRepository.findById(req.params.id);
       if (!run) return reply.status(404).send({ error: 'Not found' });
+      if (req.user!.role !== 'admin' && run.userId !== req.user!.id) return reply.status(404).send({ error: 'Not found' });
       if (run.status !== 'waiting_approval') return reply.status(409).send({ error: 'Run is not awaiting approval' });
       if (req.body.decision === 'reject') {
         RunRepository.reject(req.params.id, req.body.message ?? 'Rejected by user');
