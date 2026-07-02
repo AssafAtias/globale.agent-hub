@@ -10,7 +10,7 @@ function hashToken(token: string) {
 }
 
 export const RunnerRepository = {
-  register(name: string, token: string): { runner: RunnerRow; token: string } {
+  register(name: string, token: string, userId: string | null = null): { runner: RunnerRow; token: string } {
     const id = randomUUID();
     const row: RunnerRow = {
       id,
@@ -18,7 +18,7 @@ export const RunnerRepository = {
       tokenHash: hashToken(token),
       lastSeen: new Date().toISOString(),
       status: 'online',
-      userId: null,
+      userId,
     };
     getDb().insert(runners).values(row).run();
     return { runner: row, token };

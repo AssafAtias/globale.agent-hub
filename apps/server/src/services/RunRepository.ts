@@ -12,7 +12,7 @@ export const RunRepository = {
   findById(id: string) {
     return getDb().select().from(runs).where(eq(runs.id, id)).get() ?? null;
   },
-  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null }): RunRow {
+  create(data: Pick<RunRow, 'agentId' | 'trigger' | 'triggerPayload' | 'context'> & { replyTo?: string | null; userId?: string | null }): RunRow {
     const row: RunRow = {
       id: randomUUID(),
       status: 'pending',
